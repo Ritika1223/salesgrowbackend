@@ -1,0 +1,58 @@
+const mongoose = require("mongoose");
+
+const HostRequestSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+    },
+    transactionId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    upiId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    attachment: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    adminNote: {
+      type: String,
+      default: "",
+    },
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { timestamps: true }
+);
+
+HostRequestSchema.index({ userId: 1, status: 1 });
+
+module.exports = mongoose.model("HostRequest", HostRequestSchema);
