@@ -3,6 +3,7 @@ const User = require("../models/User");
 const mailer = require("../helper/mailer");
 const { PLANS } = require("../helper/rules");
 const { activatePlanPurchase } = require("./packageController");
+const { passwordMatches } = require("./authController");
 
 function tokenUserId(req) {
   const u = req.user;
@@ -17,9 +18,18 @@ exports.createPlanRequest = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select("+password +transactionPassword");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    const enteredTxPassword = String(req.body.transactionPassword || "");
+    const currentTxPassword = String(user.transactionPassword || "").trim()
+      ? user.transactionPassword
+      : user.password;
+    const txOk = await passwordMatches(currentTxPassword, enteredTxPassword);
+    if (!txOk) {
+      return res.status(400).json({ message: "Wrong transaction password" });
     }
 
     if (user.isActive) {
@@ -45,9 +55,10 @@ exports.createPlanRequest = async (req, res) => {
       return res.status(400).json({ message: "Invalid plan" });
     }
 
-    const name = String(req.body.name || "").trim();
-    const email = String(req.body.email || "").trim().toLowerCase();
+    const name = String(req.body.name || user.name || "").trim();
+    const email = String(req.body.email || user.email || "").trim().toLowerCase();
     const transactionId = String(req.body.transactionId || "").trim();
+    const remark = String(req.body.remark || "").trim();
     const upiId = String(req.body.upiId || "").trim();
     const amount = Number(req.body.amount);
 
@@ -65,13 +76,8 @@ exports.createPlanRequest = async (req, res) => {
         message: `Amount must be ₹${plan.price} for ${planName}`,
       });
     }
-    if (!transactionId && !upiId) {
-      return res.status(400).json({
-        message: "Transaction ID or UPI ID is required",
-      });
-    }
-    if (!req.file) {
-      return res.status(400).json({ message: "Payment screenshot is required" });
+    if (!transactionId) {
+      return res.status(400).json({ message: "Transaction ID is required" });
     }
 
     const request = await PlanRequest.create({
@@ -81,8 +87,9 @@ exports.createPlanRequest = async (req, res) => {
       email,
       amount,
       transactionId,
+      remark,
       upiId,
-      attachment: `/uploads/${req.file.filename}`,
+      attachment: req.file ? `/uploads/${req.file.filename}` : "",
       status: "pending",
     });
 
@@ -96,6 +103,19 @@ exports.createPlanRequest = async (req, res) => {
         "Admin will contact you as soon as possible. Confirmation time is maximum 20 minutes.",
       data: request,
     });
+  } catch (err) {
+    return res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+exports.getMyPlanRequests = async (req, res) => {
+  try {
+    const userId = tokenUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const list = await PlanRequest.find({ userId }).sort({ createdAt: -1 });
+    return res.json({ data: list });
   } catch (err) {
     return res.status(500).json({ message: err.message || "Server error" });
   }

@@ -19,7 +19,7 @@ const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || "7d";
 const COINS_PER_RUPEE = 10;
 const REFERRER_REWARD_COINS = 75;
 
-function randomCode(len = 6) {
+function randomDigits(len = 6) {
   const numbers = "0123456789";
   let out = "";
   for (let i = 0; i < len; i += 1) {
@@ -29,20 +29,58 @@ function randomCode(len = 6) {
 }
 
 async function generateUniqueReferralCode() {
-  const base = "CPX"
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase()
-    .slice(0, 6) || "USER";
-
+  const base = "CPX";
   for (let i = 0; i < 10; i += 1) {
-    const candidate = `${base}${randomCode(6)}`;
+    const candidate = `${base}${randomDigits(6)}`;
     const exists = await User.exists({ referralCode: candidate });
     if (!exists) return candidate;
   }
-
-  // final fallback with longer random section
   return `${base}${Date.now().toString().slice(-6)}`;
 }
+
+function isReferralCode(code) {
+  return /^CPX\d{6}$/.test(String(code || "").trim().toUpperCase());
+}
+
+async function ensureReferralIsUserId(user) {
+  const current = String(user.referralCode || "").trim().toUpperCase();
+  if (isReferralCode(current)) {
+    user.referralCode = current;
+    return current;
+  }
+  user.referralCode = await generateUniqueReferralCode();
+  return user.referralCode;
+}
+
+async function findUserByReferralId(code) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return null;
+
+  const byCode = await User.findOne({ referralCode: normalized });
+  if (byCode) return byCode;
+
+  if (/^[A-F0-9]{24}$/.test(normalized)) {
+    return User.findById(normalized);
+  }
+  return null;
+}
+
+async function passwordMatches(storedRaw, enteredRaw) {
+  const entered = String(enteredRaw || "").trim();
+  const stored = String(storedRaw || "").trim();
+  if (!entered || !stored) return false;
+  if (stored === entered) return true;
+  if (stored.startsWith("$2")) {
+    try {
+      return await bcrypt.compare(entered, stored);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+exports.passwordMatches = passwordMatches;
 
 function buildToken(user) {
   return jwt.sign(
@@ -123,22 +161,21 @@ exports.register = async (req, res) => {
     let referrer = null;
     const normalizedReferralCode = String(referralCode || "").trim().toUpperCase();
     if (normalizedReferralCode) {
-      referrer = await User.findOne({ referralCode: normalizedReferralCode });
+      referrer = await findUserByReferralId(normalizedReferralCode);
       if (!referrer) {
         return res.status(400).json({ message: "Invalid referral code" });
       }
     }
-
-    const generatedReferralCode = await generateUniqueReferralCode();
 
     const user = await User.create({
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
       password: String(password),
-      referralCode: generatedReferralCode,
       referredBy: referrer?._id || null
     });
+    await ensureReferralIsUserId(user);
+    await user.save();
 
 
     if (referrer) {
@@ -218,9 +255,7 @@ exports.login = async (req, res) => {
       user.password = "123456";
     }
 
-    if (!user.referralCode || !String(user.referralCode).trim()) {
-      user.referralCode = await generateUniqueReferralCode();
-    }
+    await ensureReferralIsUserId(user);
     if (user.isModified()) {
       await user.save();
     }
@@ -229,6 +264,73 @@ exports.login = async (req, res) => {
     res.json({ user: publicUser(user), token });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+exports.changeLoginPassword = async (req, res) => {
+  try {
+    const id = tokenUserId(req);
+    if (!id) return res.status(401).json({ message: "Unauthorized" });
+
+    const oldPassword = String(req.body.oldPassword || "");
+    const newPassword = String(req.body.newPassword || "");
+    const confirmPassword = String(req.body.confirmPassword || "");
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters" });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "New password and confirm password do not match" });
+    }
+
+    const user = await User.findById(id).select("+password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const ok = await passwordMatches(user.password, oldPassword);
+    if (!ok) {
+      return res.status(400).json({ message: "Old password is wrong" });
+    }
+
+    user.password = newPassword.trim();
+    await user.save();
+    return res.json({ message: "Login password updated" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.changeTransactionPassword = async (req, res) => {
+  try {
+    const id = tokenUserId(req);
+    if (!id) return res.status(401).json({ message: "Unauthorized" });
+
+    const oldPassword = String(req.body.oldPassword || "");
+    const newPassword = String(req.body.newPassword || "");
+    const confirmPassword = String(req.body.confirmPassword || "");
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters" });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "New password and confirm password do not match" });
+    }
+
+    const user = await User.findById(id).select("+password +transactionPassword");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const current = String(user.transactionPassword || "").trim()
+      ? user.transactionPassword
+      : user.password;
+    const ok = await passwordMatches(current, oldPassword);
+    if (!ok) {
+      return res.status(400).json({ message: "Old transaction password is wrong" });
+    }
+
+    user.transactionPassword = newPassword.trim();
+    await user.save();
+    return res.json({ message: "Transaction password updated" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -286,8 +388,11 @@ exports.getMe = async (req, res) => {
         message: "Your account is inactive. Please contact admin.",
       });
     }
+    await ensureReferralIsUserId(user);
     if (user.profileMode === "host" && !user.hostApproved) {
       user.hostApproved = true;
+    }
+    if (user.isModified()) {
       await user.save();
     }
     const allowedTypes = [
@@ -359,6 +464,25 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+exports.lookupReferral = async (req, res) => {
+  try {
+    const code = String(req.query.code || "").trim();
+    if (!code) {
+      return res.status(400).json({ message: "Referral id is required" });
+    }
+    const user = await findUserByReferralId(code);
+    if (!user) {
+      return res.status(404).json({ message: "Referral id not found" });
+    }
+    return res.json({
+      id: user.referralCode,
+      name: user.name
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getReferralByUserId = async (req, res) => {
   try {
     const id = tokenUserId(req);
@@ -370,8 +494,8 @@ exports.getReferralByUserId = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (!user.referralCode || !String(user.referralCode).trim()) {
-      user.referralCode = await generateUniqueReferralCode();
+    await ensureReferralIsUserId(user);
+    if (user.isModified()) {
       await user.save();
     }
     const allowedTypes = ['REFERRAL_BONUS'];

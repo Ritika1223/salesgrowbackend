@@ -423,6 +423,30 @@ exports.getTopLeaders = async (req, res) => {
   }
 }
 
+exports.getFundReceived = async (req, res) => {
+  try {
+    const id = req.user?.sub || req.user?.id || req.user?._id;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const rows = await Wallet.find({
+      userId: new mongoose.Types.ObjectId(id),
+      direction: "credit",
+    })
+      .populate({
+        path: "fromUserId",
+        select: "name referralCode nickname",
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.getWalletTransactions = async (req, res) => {
 
   try {

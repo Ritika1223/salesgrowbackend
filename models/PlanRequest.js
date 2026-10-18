@@ -32,6 +32,11 @@ const PlanRequestSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    remark: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     upiId: {
       type: String,
       trim: true,

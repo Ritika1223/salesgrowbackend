@@ -15,11 +15,13 @@ router.post(
   planRequestController.createPlanRequest
 );
 router.get("/plan-request/me", Token.Validate, planRequestController.getMyPlanRequest);
+router.get("/plan-request/history", Token.Validate, planRequestController.getMyPlanRequests);
 router.get("/getReportStats", Token.Validate, packageController.getReportStats);
 router.get("/getPoolReport", packageController.getPoolReport);
 router.get("/getIncomeReport", Token.Validate, packageController.getIncomeReport);
 router.get("/top-leaders", packageController.getTopLeaders);
 router.get("/getWalletTransactions", Token.Validate, packageController.getWalletTransactions);
+router.get("/fund-received", Token.Validate, packageController.getFundReceived);
 router.post("/to-diamond", Token.Validate, packageController.convertToDiamond);
 
 module.exports = router;

@@ -66,6 +66,12 @@ const userSchema = new mongoose.Schema({
     required: true,
     select: false
   },
+  /** Empty until the user sets one. Until then it matches the login password. */
+  transactionPassword: {
+    type: String,
+    select: false,
+    default: ""
+  },
   referralCode: {
     type: String,
     trim: true,

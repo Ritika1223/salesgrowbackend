@@ -15,8 +15,12 @@ const upload = require("../middleware/upload");
 
 // AUTH
 router.post("/register", authController.register);
+router.get("/referral/lookup", authController.lookupReferral);
 
 router.post("/login", authController.login);
+
+router.post("/user/login-password", Validate, authController.changeLoginPassword);
+router.post("/user/transaction-password", Validate, authController.changeTransactionPassword);
 
 
 // PROFILE MODE (JWT)
