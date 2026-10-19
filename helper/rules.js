@@ -42,8 +42,8 @@ const SUBSCRIPTION_INCOME = {
 };
 
 const INVESTMENT = {
-  min: 50,
-  max: 200,
+  min: 5000,
+  max: 200000,
   roiPercent: 1,
   durationDays: 365,
   dailyCap: 100000,
