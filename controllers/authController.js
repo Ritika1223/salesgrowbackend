@@ -137,7 +137,7 @@ function publicUser(user, totalearn) {
   // Register user
 exports.register = async (req, res) => {
   try {
-    const { name, nickname, email, phone, password, referralCode } = req.body;
+    const { name, email, phone, password, referralCode } = req.body;
 
     if (!name?.trim() ||  !email?.trim() || !phone?.trim() || !password) {
       return res.status(400).json({ message: "Name, email, phone, and password are required" });

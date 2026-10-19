@@ -7,7 +7,13 @@ const userSchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
- 
+  /** Optional at signup. Sparse so users with no nickname do not collide on null. */
+  nickname: {
+    type: String,
+    trim: true,
+    unique: true,
+    sparse: true
+  },
   about: {
     type: String,
     trim: true
