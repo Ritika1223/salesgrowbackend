@@ -9,7 +9,7 @@ const PlanRequestSchema = new mongoose.Schema(
     },
     planName: {
       type: String,
-      enum: ["BASIC", "STANDARD", "PREMIUM"],
+      enum: ["BASIC", "STANDARD", "PREMIUM", "INVEST"],
       required: true,
     },
     name: {

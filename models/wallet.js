@@ -51,6 +51,7 @@ const walletSchema = new mongoose.Schema({
       'DIRECT_INCOME',
       'VIP_INCOME',
       'SELF_INCOME',
+      'SALARY_INCOME',
       'WITHDRAW',
       'ADMIN_ADJUST'
     ],

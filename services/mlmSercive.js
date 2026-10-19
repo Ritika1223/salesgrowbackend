@@ -336,10 +336,11 @@ async function creditWallet(userId, data) {
 
     let update = { $inc: {} };
 
-    const earningTypes = ['LEVEL_INCOME', 'POOL_INCOME', 'RANK_BONUS', 'DIRECT_INCOME', 'SELF_INCOME', 'VIP_INCOME'];
+    const earningTypes = ['LEVEL_INCOME', 'POOL_INCOME', 'RANK_BONUS', 'DIRECT_INCOME', 'SELF_INCOME', 'VIP_INCOME', 'SALARY_INCOME'];
 
     if (earningTypes.includes(data.type)) {
       update.$inc.totalEarning = data.amount;
+      update.$inc.walletBalance = data.amount;
     } else {
       update.$inc.walletBalance = data.amount;
     }

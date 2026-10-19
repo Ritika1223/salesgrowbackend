@@ -1,11 +1,21 @@
 const cron = require('node-cron');
 const { distributeDailyPool } = require('../services/mlmSercive');
+const { runDailyInvestmentIncome } = require('../services/investmentService');
 const { updateBonusRank } = require('../services/rankService');
 const User = require('../models/User');
 
 exports.startCron = async () => {
 
     // DAILY POOL DISTRIBUTION
+    cron.schedule('0 1 * * 1-6', async () => {
+        try {
+            console.log('Running investment ROI and salary');
+            await runDailyInvestmentIncome();
+        } catch (err) {
+            console.log('Investment Cron Error:', err.message);
+        }
+    });
+
     cron.schedule('59 23 * * *', async () => {
         // cron.schedule('*/1 * * * *', async () => {
         try {

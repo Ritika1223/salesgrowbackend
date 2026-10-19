@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const packageController = require("../controllers/packageController");
 const planRequestController = require("../controllers/planRequestController");
+const withdrawalController = require("../controllers/withdrawalController");
 const Token = require("../middleware/frontAuthMiddleware");
 const upload = require("../middleware/upload");
 
@@ -22,6 +23,8 @@ router.get("/getIncomeReport", Token.Validate, packageController.getIncomeReport
 router.get("/top-leaders", packageController.getTopLeaders);
 router.get("/getWalletTransactions", Token.Validate, packageController.getWalletTransactions);
 router.get("/fund-received", Token.Validate, packageController.getFundReceived);
+router.post("/withdraw", Token.Validate, withdrawalController.createWithdrawal);
+router.get("/withdraw/history", Token.Validate, withdrawalController.myWithdrawals);
 router.post("/to-diamond", Token.Validate, packageController.convertToDiamond);
 
 module.exports = router;

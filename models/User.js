@@ -98,7 +98,7 @@ const userSchema = new mongoose.Schema({
   },
   plan: {
     type: String,
-    enum: ['BASIC', 'STANDARD', 'PREMIUM'],
+    enum: ['BASIC', 'STANDARD', 'PREMIUM', 'INVEST'],
     default: null
   },
   role: {
@@ -127,6 +127,10 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   totalEarning: {
+    type: Number,
+    default: 0
+  },
+  teamBusiness: {
     type: Number,
     default: 0
   },

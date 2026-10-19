@@ -1,8 +1,9 @@
 const PlanRequest = require("../models/PlanRequest");
 const User = require("../models/User");
 const mailer = require("../helper/mailer");
-const { PLANS } = require("../helper/rules");
+const { PLANS, INVESTMENT } = require("../helper/rules");
 const { activatePlanPurchase } = require("./packageController");
+const { acceptInvestment } = require("../services/investmentService");
 const { passwordMatches } = require("./authController");
 
 function tokenUserId(req) {
@@ -49,9 +50,10 @@ exports.createPlanRequest = async (req, res) => {
       });
     }
 
-    const planName = String(req.body.planName || "").trim().toUpperCase();
+    const planName = String(req.body.planName || "INVEST").trim().toUpperCase();
     const plan = PLANS[planName];
-    if (!plan) {
+    const isInvestment = planName === "INVEST" || !plan;
+    if (!isInvestment && !plan) {
       return res.status(400).json({ message: "Invalid plan" });
     }
 
@@ -71,7 +73,13 @@ exports.createPlanRequest = async (req, res) => {
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ message: "Enter a valid amount" });
     }
-    if (Number(plan.price) !== amount) {
+    if (isInvestment) {
+      if (amount < INVESTMENT.min || amount > INVESTMENT.max) {
+        return res.status(400).json({
+          message: `Investment must be ${INVESTMENT.min} to ${INVESTMENT.max}`,
+        });
+      }
+    } else if (Number(plan.price) !== amount) {
       return res.status(400).json({
         message: `Amount must be ₹${plan.price} for ${planName}`,
       });
@@ -82,7 +90,7 @@ exports.createPlanRequest = async (req, res) => {
 
     const request = await PlanRequest.create({
       userId,
-      planName,
+      planName: isInvestment ? "INVEST" : planName,
       name,
       email,
       amount,
@@ -166,11 +174,20 @@ exports.updatePlanRequestStatus = async (req, res) => {
     }
 
     if (status === "approved") {
-      const activated = await activatePlanPurchase(request.userId, request.planName);
-      if (!activated.success) {
-        return res.status(400).json({
-          message: activated.message || "Could not activate plan",
-        });
+      if (request.planName === "INVEST") {
+        const activated = await acceptInvestment(request.userId, request.amount, request._id);
+        if (!activated.success) {
+          return res.status(400).json({
+            message: activated.message || "Could not accept investment",
+          });
+        }
+      } else {
+        const activated = await activatePlanPurchase(request.userId, request.planName);
+        if (!activated.success) {
+          return res.status(400).json({
+            message: activated.message || "Could not activate plan",
+          });
+        }
       }
     }
 
@@ -201,7 +218,7 @@ exports.updatePlanRequestStatus = async (req, res) => {
     return res.json({
       message:
         status === "approved"
-          ? "Payment verified. Plan is now active and host privilege is unlocked."
+          ? "Investment accepted. Wallet income has been credited."
           : "Request rejected. User has been emailed.",
       data: populated,
     });
