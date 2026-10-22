@@ -214,14 +214,23 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { phone, password } = req.body;
+    const identifier = String(phone || "").trim();
 
-    if (!phone?.trim() || !password) {
-      return res.status(400).json({ message: "Phone and password are required" });
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Email or mobile number and password are required" });
     }
 
-    const user = await User.findOne({ phone: phone.trim() }).select("+password");
+    let user;
+    if (identifier.includes("@")) {
+      const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      user = await User.findOne({
+        email: { $regex: `^${escaped}$`, $options: "i" },
+      }).select("+password");
+    } else {
+      user = await User.findOne({ phone: identifier }).select("+password");
+    }
     if (!user) {
-      return res.status(401).json({ message: "Invalid phone or password" });
+      return res.status(401).json({ message: "Invalid email, mobile number, or password" });
     }
 
     const entered = String(password).trim();
@@ -242,7 +251,7 @@ exports.login = async (req, res) => {
     }
 
     if (!match) {
-      return res.status(401).json({ message: "Invalid phone or password" });
+      return res.status(401).json({ message: "Invalid email, mobile number, or password" });
     }
 
     if (user.isDisabled) {
@@ -350,18 +359,7 @@ exports.setProfileMode = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const alreadyHost = Boolean(user.hostApproved) || user.profileMode === "host";
-    if (profileMode === "host" && !user.isActive && !alreadyHost) {
-      return res.status(403).json({
-        code: "NO_ACTIVE_PLAN",
-        message:
-          "You do not have any active plan. Activate a plan to become a host.",
-        hostApproved: false,
-        isActive: false,
-      });
-    }
-
-    if (profileMode === "host" && user.isActive) {
+    if (profileMode === "host") {
       user.hostApproved = true;
     }
     user.profileMode = profileMode;

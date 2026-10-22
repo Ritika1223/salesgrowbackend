@@ -1,7 +1,7 @@
 const PlanRequest = require("../models/PlanRequest");
 const User = require("../models/User");
 const mailer = require("../helper/mailer");
-const { PLANS, INVESTMENT } = require("../helper/rules");
+const { PLANS, investmentAmountError } = require("../helper/rules");
 const { activatePlanPurchase } = require("./packageController");
 const { acceptInvestment } = require("../services/investmentService");
 const { passwordMatches } = require("./authController");
@@ -74,14 +74,13 @@ exports.createPlanRequest = async (req, res) => {
       return res.status(400).json({ message: "Enter a valid amount" });
     }
     if (isInvestment) {
-      if (amount < INVESTMENT.min || amount > INVESTMENT.max) {
-        return res.status(400).json({
-          message: `Investment must be ${INVESTMENT.min} to ${INVESTMENT.max}`,
-        });
+      const amountError = investmentAmountError(amount);
+      if (amountError) {
+        return res.status(400).json({ message: amountError });
       }
     } else if (Number(plan.price) !== amount) {
       return res.status(400).json({
-        message: `Amount must be ₹${plan.price} for ${planName}`,
+        message: `Amount must be $${plan.price} for ${planName}`,
       });
     }
     if (!transactionId) {

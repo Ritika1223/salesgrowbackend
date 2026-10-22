@@ -35,11 +35,11 @@ exports.createWithdrawal = async (req, res) => {
     const transactionPassword = String(req.body.transactionPassword || "");
 
     if (!Number.isFinite(amount) || amount < INVESTMENT.minWithdraw) {
-      return res.status(400).json({ message: `Minimum withdrawal is ${INVESTMENT.minWithdraw}` });
+      return res.status(400).json({ message: `Minimum withdrawal is $${INVESTMENT.minWithdraw}` });
     }
     if (!upiId) return res.status(400).json({ message: "UPI ID is required" });
 
-    const user = await User.findById(userId).select("+password +transactionPassword walletBalance");
+    const user = await User.findById(userId).select("+password +transactionPassword walletBalance totalEarning totalWithdraw");
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const currentTx = String(user.transactionPassword || "").trim()
@@ -50,8 +50,12 @@ exports.createWithdrawal = async (req, res) => {
 
     const pending = await Withdrawal.find({ userId, status: "pending" });
     const reserved = pending.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    if (Number(user.walletBalance || 0) - reserved < amount) {
-      return res.status(400).json({ message: "Not enough wallet balance" });
+    const mlmAvailable = Math.max(
+      0,
+      Number(user.totalEarning || 0) - Number(user.totalWithdraw || 0)
+    );
+    if (mlmAvailable - reserved < amount) {
+      return res.status(400).json({ message: "Not enough income balance" });
     }
 
     const deduction = Math.round(amount * INVESTMENT.withdrawDeductionPercent) / 100;
@@ -65,7 +69,7 @@ exports.createWithdrawal = async (req, res) => {
     });
 
     return res.status(201).json({
-      message: "Withdrawal request sent to admin",
+      message: "Withdrawal request sent. It is credited within 24 hours.",
       data: request,
     });
   } catch (err) {
@@ -109,14 +113,16 @@ exports.updateWithdrawalStatus = async (req, res) => {
     }
 
     if (status === "approved") {
-      const user = await User.findOneAndUpdate(
-        { _id: request.userId, walletBalance: { $gte: request.amount } },
-        { $inc: { walletBalance: -request.amount, totalWithdraw: request.amount } },
-        { new: true }
+      const user = await User.findById(request.userId).select("totalEarning totalWithdraw");
+      const mlmAvailable = Math.max(
+        0,
+        Number(user?.totalEarning || 0) - Number(user?.totalWithdraw || 0)
       );
-      if (!user) {
-        return res.status(400).json({ message: "User does not have enough balance" });
+      if (!user || mlmAvailable < request.amount) {
+        return res.status(400).json({ message: "User does not have enough income balance" });
       }
+      user.totalWithdraw = Number(user.totalWithdraw || 0) + request.amount;
+      await user.save();
       await Wallet.create({
         userId: request.userId,
         amount: request.amount,

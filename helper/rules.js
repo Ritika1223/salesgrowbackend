@@ -41,42 +41,40 @@ const SUBSCRIPTION_INCOME = {
   VIP: 9,
 };
 
+/** All investment figures are US dollars. */
 const INVESTMENT = {
-  min: 5000,
-  max: 200000,
+  currency: "USD",
+  min: 50,
+  step: 50,
   roiPercent: 1,
   durationDays: 365,
+  roiDays: "Monday to Saturday",
   dailyCap: 100000,
-  minWithdraw: 200,
+  minWithdraw: 5,
   withdrawDeductionPercent: 10,
+  withdrawCreditHours: 24,
 };
 
 const DIRECT_LEVELS = [
   { from: 1, to: 1, percent: 5 },
   { from: 2, to: 2, percent: 2 },
   { from: 3, to: 3, percent: 1 },
-  { from: 4, to: 7, percent: 0.5 },
 ];
 
 const TEAM_LEVELS = [
   { from: 1, to: 1, percent: 20 },
   { from: 2, to: 2, percent: 10 },
   { from: 3, to: 3, percent: 5 },
-  { from: 4, to: 14, percent: 3 },
-  { from: 15, to: 23, percent: 2 },
+  { from: 4, to: 10, percent: 3 },
+  { from: 15, to: 21, percent: 2 },
 ];
 
+/** Monthly salary. Self is the user's own active investment. Each of 3 legs must reach the team amount. */
 const SALARY_SLABS = [
-  { min: 100000, daily: 200 },
-  { min: 250000, daily: 500 },
-  { min: 500000, daily: 1000 },
-  { min: 1000000, daily: 2000 },
-  { min: 2500000, daily: 5000 },
-  { min: 5000000, daily: 10000 },
-  { min: 10000000, daily: 15000 },
-  { min: 25000000, daily: 30000 },
-  { min: 50000000, daily: 40000 },
-  { min: 100000000, daily: 50000 },
+  { self: 100, leg: 1000, legs: 3, monthly: 50 },
+  { self: 250, leg: 2500, legs: 3, monthly: 100 },
+  { self: 500, leg: 5000, legs: 3, monthly: 200 },
+  { self: 1000, leg: 10000, legs: 3, monthly: 500 },
 ];
 
 function percentForLevel(table, level) {
@@ -84,13 +82,26 @@ function percentForLevel(table, level) {
   return row ? row.percent : 0;
 }
 
-function salaryForBusiness(teamBusiness) {
-  const amount = Number(teamBusiness) || 0;
-  let daily = 0;
-  for (const slab of SALARY_SLABS) {
-    if (amount >= slab.min) daily = slab.daily;
+function investmentAmountError(amount) {
+  const paid = Number(amount);
+  if (!Number.isFinite(paid) || paid < INVESTMENT.min) {
+    return `Minimum investment is $${INVESTMENT.min}`;
   }
-  return daily;
+  if (Math.round(paid * 100) % Math.round(INVESTMENT.step * 100) !== 0) {
+    return `Investment must be a multiple of $${INVESTMENT.step}`;
+  }
+  return "";
+}
+
+function salaryForQualification(selfAmount, legAmounts) {
+  const self = Number(selfAmount) || 0;
+  const legs = Array.isArray(legAmounts) ? legAmounts.map((n) => Number(n) || 0) : [];
+  let monthly = 0;
+  for (const slab of SALARY_SLABS) {
+    const qualified = legs.filter((amount) => amount >= slab.leg).length;
+    if (self >= slab.self && qualified >= slab.legs) monthly = slab.monthly;
+  }
+  return monthly;
 }
 
 module.exports = {
@@ -102,5 +113,6 @@ module.exports = {
   TEAM_LEVELS,
   SALARY_SLABS,
   percentForLevel,
-  salaryForBusiness,
+  investmentAmountError,
+  salaryForQualification,
 };

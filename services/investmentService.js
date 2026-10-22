@@ -7,7 +7,8 @@ const {
   DIRECT_LEVELS,
   TEAM_LEVELS,
   percentForLevel,
-  salaryForBusiness,
+  investmentAmountError,
+  salaryForQualification,
 } = require("../helper/rules");
 
 function roundMoney(value) {
@@ -16,6 +17,10 @@ function roundMoney(value) {
 
 function dayKey(date) {
   return new Date(date).toISOString().slice(0, 10);
+}
+
+function monthKey(date) {
+  return dayKey(date).slice(0, 7);
 }
 
 function isRoiDay(date) {
@@ -48,8 +53,9 @@ async function creditCapped(userId, payload, date) {
 
 async function acceptInvestment(userId, amount, requestId) {
   const paid = Number(amount);
-  if (!Number.isFinite(paid) || paid < INVESTMENT.min || paid > INVESTMENT.max) {
-    return { success: false, message: `Investment must be ${INVESTMENT.min} to ${INVESTMENT.max}` };
+  const amountError = investmentAmountError(paid);
+  if (amountError) {
+    return { success: false, message: amountError };
   }
 
   const user = await User.findById(userId);
@@ -79,16 +85,8 @@ async function acceptInvestment(userId, amount, requestId) {
   user.teamBusiness = Number(user.teamBusiness || 0) + paid;
   await user.save();
 
-  await creditWallet(userId, {
-    amount: paid,
-    type: "TOPUP",
-    direction: "credit",
-    description: "Investment amount",
-    transactionId: `${investment._id}-AMOUNT`,
-  });
-
   let sponsorId = user.referredBy;
-  for (let level = 1; level <= 7 && sponsorId; level += 1) {
+  for (let level = 1; sponsorId; level += 1) {
     const sponsor = await User.findById(sponsorId);
     if (!sponsor) break;
     sponsor.teamBusiness = Number(sponsor.teamBusiness || 0) + paid;
@@ -109,14 +107,6 @@ async function acceptInvestment(userId, amount, requestId) {
     sponsorId = sponsor.referredBy;
   }
 
-  for (let level = 8; level <= 23 && sponsorId; level += 1) {
-    const sponsor = await User.findById(sponsorId);
-    if (!sponsor) break;
-    sponsor.teamBusiness = Number(sponsor.teamBusiness || 0) + paid;
-    await sponsor.save();
-    sponsorId = sponsor.referredBy;
-  }
-
   if (isRoiDay(startedAt)) {
     await payDailyRoi(investment, startedAt);
   }
@@ -127,7 +117,7 @@ async function acceptInvestment(userId, amount, requestId) {
 async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
   const investor = await User.findById(investorId).select("referredBy");
   let sponsorId = investor?.referredBy;
-  for (let level = 1; level <= 23 && sponsorId; level += 1) {
+  for (let level = 1; level <= 21 && sponsorId; level += 1) {
     const sponsor = await User.findById(sponsorId).select("referredBy");
     if (!sponsor) break;
     const teamPercent = percentForLevel(TEAM_LEVELS, level);
@@ -154,7 +144,7 @@ async function payDailyRoi(row, now) {
     amount: roi,
     type: "SELF_INCOME",
     direction: "credit",
-    description: "1% daily ROI",
+    description: "1% daily ROI (USD)",
     transactionId: `${row._id}-ROI-${key}`,
   }, now);
   if (credit.success && !credit.skipped) {
@@ -162,6 +152,21 @@ async function payDailyRoi(row, now) {
     row.lastRoiOn = key;
     await row.save();
   }
+}
+
+async function monthlySalary(userId) {
+  const [selfRows, user] = await Promise.all([
+    Investment.find({ userId, status: "active" }).select("amount"),
+    User.findById(userId).select("directs"),
+  ]);
+  const self = selfRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const directs = user?.directs?.length
+    ? await User.find({ _id: { $in: user.directs } }).select("teamBusiness")
+    : [];
+  return salaryForQualification(
+    self,
+    directs.map((direct) => direct.teamBusiness)
+  );
 }
 
 async function runDailyInvestmentIncome(now = new Date()) {
@@ -174,19 +179,19 @@ async function runDailyInvestmentIncome(now = new Date()) {
       await payDailyRoi(row, now);
     }
 
-    if (row.lastSalaryOn !== key) {
-      const user = await User.findById(row.userId).select("teamBusiness");
-      const salary = salaryForBusiness(user?.teamBusiness);
+    const month = monthKey(now);
+    if (row.lastSalaryOn !== month) {
+      const salary = await monthlySalary(row.userId);
       if (salary > 0) {
-        await creditCapped(row.userId, {
+        const paid = await creditCapped(row.userId, {
           amount: salary,
           type: "SALARY_INCOME",
           direction: "credit",
-          description: "Salary income",
-          transactionId: `${row._id}-SALARY-${key}`,
+          description: "Monthly salary",
+          transactionId: `${row._id}-SALARY-${month}`,
         }, now);
+        if (paid.success && !paid.skipped) row.lastSalaryOn = month;
       }
-      row.lastSalaryOn = key;
     }
 
     await row.save();

@@ -17,6 +17,18 @@ const TEXT_MESSAGE_COST_AFTER_FREE = 2;
 const NEW_DM_START_COST = 50;
 const LIVE_VIEWER_TEXT_COINS = 2;
 
+/** Coin ledger used by chat, live, host earnings, and coin purchases. */
+const CHAT_COIN_TYPES = [
+  "BUY_COIN",
+  "TOPUP",
+  "CHAT_SPEND",
+  "CHAT_EARN",
+  "LIVE_TIP",
+  "ADMIN_ADJUST",
+  "REFERRAL_BONUS",
+];
+const HOST_EARN_TYPES = ["CHAT_EARN", "LIVE_TIP"];
+
 // GET USERS
 
 exports.getUsers = async (req, res) => {
@@ -974,34 +986,48 @@ exports.getWalletAmount = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const walletSummary = await Wallet.aggregate([
-      {
-        $match: {
-          userId:
-            new mongoose.Types.ObjectId(
-              userId
-            )
-        }
-      },
-      {
-        $group: {
-
-          _id: '$direction',
-
-          total: {
-            $sum: '$amount'
-          }
-        }
-      }
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const [walletSummary, hostRows] = await Promise.all([
+      Wallet.aggregate([
+        {
+          $match: {
+            userId: userObjectId,
+            type: { $in: CHAT_COIN_TYPES },
+          },
+        },
+        {
+          $group: {
+            _id: "$direction",
+            total: { $sum: "$amount" },
+          },
+        },
+      ]),
+      Wallet.aggregate([
+        {
+          $match: {
+            userId: userObjectId,
+            type: { $in: HOST_EARN_TYPES },
+            direction: "credit",
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
     ]);
 
+    const byDirection = Object.fromEntries(
+      walletSummary.map((row) => [row._id, Number(row.total) || 0])
+    );
+    const coins = Number(user.walletBalance) || 0;
+
     return res.json({
-      walletAvailableBalance: user.walletBalance + user.totalEarning, // coins
-      walletWithdraw: (Number(user.totalWithdraw) || 0), // coins
-      walletBalance: Number(user.walletBalance) + Number(user.totalEarning), // coins
-      walletBalanceRupees: (Number(user.walletBalance) || 0) / COINS_PER_RUPEE,
+      walletAvailableBalance: coins,
+      walletBalance: coins,
+      hostCoins: Number(hostRows[0]?.total) || 0,
+      coinsAdded: byDirection.credit || 0,
+      coinsSpent: byDirection.debit || 0,
+      walletBalanceRupees: coins / COINS_PER_RUPEE,
       coinsPerRupee: COINS_PER_RUPEE,
-      walletSummary: walletSummary
+      walletSummary,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message || "Internal server error" });
@@ -1013,7 +1039,10 @@ exports.getWalletTransactions = async (req, res) => {
   try {
     const { userId } = req.params;
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
-    const txs = await Wallet.find({ userId })
+    const txs = await Wallet.find({
+      userId,
+      type: { $in: CHAT_COIN_TYPES },
+    })
       .sort({ createdAt: -1 })
       .limit(limit);
     return res.json({ transactions: txs });
