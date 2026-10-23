@@ -29,7 +29,7 @@ function randomDigits(len = 6) {
 }
 
 async function generateUniqueReferralCode() {
-  const base = "CPX";
+  const base = "KKW";
   for (let i = 0; i < 10; i += 1) {
     const candidate = `${base}${randomDigits(6)}`;
     const exists = await User.exists({ referralCode: candidate });
@@ -39,7 +39,7 @@ async function generateUniqueReferralCode() {
 }
 
 function isReferralCode(code) {
-  return /^CPX\d{6}$/.test(String(code || "").trim().toUpperCase());
+  return /^KKW\d{6}$/.test(String(code || "").trim().toUpperCase());
 }
 
 async function ensureReferralIsUserId(user) {
