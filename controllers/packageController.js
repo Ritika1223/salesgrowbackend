@@ -376,11 +376,33 @@ exports.getIncomeReport = async (req, res) => {
 
     let totalRankIncome = RankIncome[0]?.total || 0;
 
+    const salaryIncome = await Wallet.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(
+            authUserId
+          ),
+          type: 'SALARY_INCOME'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: '$amount'
+          }
+        }
+      }
+    ]);
+
+    let totalSalaryIncome = salaryIncome[0]?.total || 0;
+
 
     return res.status(200).json({
       sucess: true,
       data: {
         SelfIncome: totalSelfIncome,
+        SalaryIncome: totalSalaryIncome,
         DirectIncome: totalDirectIncome,
         LevelIncome: totalLeveIncome,
         PoolIncome: totalPoolIncome,
@@ -430,9 +452,15 @@ exports.getFundReceived = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    const kind = String(req.query.kind || "fund");
+    const types = kind === "referral"
+      ? ["REFERRAL_BONUS"]
+      : ["BUY_COIN", "TOPUP", "ADMIN_ADJUST"];
+
     const rows = await Wallet.find({
       userId: new mongoose.Types.ObjectId(id),
       direction: "credit",
+      type: { $in: types },
     })
       .populate({
         path: "fromUserId",
