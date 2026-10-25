@@ -336,7 +336,7 @@ async function creditWallet(userId, data) {
 
     let update = { $inc: {} };
 
-    const earningTypes = ['LEVEL_INCOME', 'POOL_INCOME', 'RANK_BONUS', 'DIRECT_INCOME', 'SELF_INCOME', 'VIP_INCOME', 'SALARY_INCOME'];
+    const earningTypes = ['LEVEL_INCOME', 'ROI_TO_ROI', 'POOL_INCOME', 'RANK_BONUS', 'DIRECT_INCOME', 'SELF_INCOME', 'VIP_INCOME', 'SALARY_INCOME'];
 
     // MLM income stays on totalEarning. Chat coins (buy, spend, host earn) use walletBalance.
     if (earningTypes.includes(data.type)) {

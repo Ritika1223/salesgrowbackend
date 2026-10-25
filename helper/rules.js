@@ -61,12 +61,14 @@ const DIRECT_LEVELS = [
   { from: 3, to: 3, percent: 1 },
 ];
 
+/** Percent of a downline member's daily ROI paid up the team (ROI to ROI). */
 const TEAM_LEVELS = [
   { from: 1, to: 1, percent: 20 },
   { from: 2, to: 2, percent: 10 },
   { from: 3, to: 3, percent: 5 },
-  { from: 4, to: 10, percent: 3 },
-  { from: 15, to: 21, percent: 2 },
+  { from: 4, to: 4, percent: 5 },
+  { from: 5, to: 11, percent: 3 },
+  { from: 12, to: 21, percent: 2 },
 ];
 
 /** Monthly salary. Self is the user's own active investment. Each of 3 legs must reach the team amount. */
@@ -77,9 +79,28 @@ const SALARY_SLABS = [
   { self: 1000, leg: 10000, legs: 3, monthly: 500 },
 ];
 
+function roiToRoiMatch(extra = {}) {
+  return {
+    direction: "credit",
+    ...extra,
+    $or: [
+      { type: "ROI_TO_ROI" },
+      { type: "LEVEL_INCOME", description: { $regex: "^ROI to ROI", $options: "i" } },
+    ],
+  };
+}
+
 function percentForLevel(table, level) {
   const row = table.find((item) => level >= item.from && level <= item.to);
   return row ? row.percent : 0;
+}
+
+/** Coins added when a user buys or receives a USDT fund. 50 → 500. 1000 → 1000. Every other amount uses the same 10 coins per USDT as the 50 fund. */
+function coinsForUsdt(amount) {
+  const paid = Number(amount);
+  if (!Number.isFinite(paid) || paid <= 0) return 0;
+  if (Math.abs(paid - 1000) < 0.001) return 1000;
+  return Math.round(paid * 10);
 }
 
 function investmentAmountError(amount) {
@@ -112,7 +133,9 @@ module.exports = {
   DIRECT_LEVELS,
   TEAM_LEVELS,
   SALARY_SLABS,
+  roiToRoiMatch,
   percentForLevel,
   investmentAmountError,
   salaryForQualification,
+  coinsForUsdt,
 };

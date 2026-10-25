@@ -9,6 +9,22 @@ const HostRequest = require("../models/HostRequest");
 const PaymentHistory = require("../models/PaymentHistory");
 const UserActivity = require("../models/UserActivity");
 const Support = require("../models/Support");
+const { roiToRoiMatch } = require("../helper/rules");
+
+exports.listRoiToRoiIncome = async (req, res) => {
+  try {
+    const rows = await Wallet.find(roiToRoiMatch())
+      .populate({ path: "userId", select: "name nickname referralCode phone" })
+      .populate({ path: "fromUserId", select: "name nickname referralCode" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const amount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    return res.json({ success: true, data: rows, count: rows.length, amount });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
 
 exports.listAllUsers = async (req, res) => {
   try {

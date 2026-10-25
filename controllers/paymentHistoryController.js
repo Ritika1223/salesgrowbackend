@@ -3,6 +3,7 @@ const PaymentHistory = require("../models/PaymentHistory");
 const User = require("../models/User");
 const Wallet = require("../models/wallet");
 const { findCoinOffer } = require("../helper/coinOffers");
+const { coinsForUsdt } = require("../helper/rules");
 
 const COINS_PER_RUPEE = 10;
 
@@ -46,7 +47,7 @@ exports.createPaymentHistory = async (req, res) => {
       userEmail: payer?.email || "",
       userPhone: payer?.phone || "",
       amount: offer.amount,
-      coins: offer.coins,
+      coins: coinsForUsdt(offer.amount),
       offerId: offer.id,
       transactionNo: String(transactionNo).trim(),
       screenshot,
@@ -184,8 +185,7 @@ exports.addFundFromPayment = async (req, res) => {
     }
 
     const rupees = Number(payment.amount);
-    const offer = findCoinOffer(payment.offerId);
-    const coins = Number(payment.coins) || offer?.coins || Math.round(rupees * COINS_PER_RUPEE);
+    const coins = coinsForUsdt(rupees);
 
     user.walletBalance = (Number(user.walletBalance) || 0) + coins;
     await user.save({ session });

@@ -18,6 +18,7 @@ const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || "7d";
 
 const COINS_PER_RUPEE = 10;
 const REFERRER_REWARD_COINS = 75;
+const SIGNUP_FREE_COINS = 150;
 
 function randomDigits(len = 6) {
   const numbers = "0123456789";
@@ -172,7 +173,8 @@ exports.register = async (req, res) => {
       email: email.trim(),
       phone: phone.trim(),
       password: String(password),
-      referredBy: referrer?._id || null
+      referredBy: referrer?._id || null,
+      walletBalance: SIGNUP_FREE_COINS,
     });
     await ensureReferralIsUserId(user);
     await user.save();
@@ -198,6 +200,15 @@ exports.register = async (req, res) => {
         })
       ]);
     }
+
+    await Wallet.create({
+      userId: user._id,
+      amount: SIGNUP_FREE_COINS,
+      direction: "credit",
+      type: "TOPUP",
+      description: "Free signup coins",
+      transactionId: `signup-${user._id}`,
+    });
 
     const token = buildToken(user);
     res.status(201).json({ user: publicUser(user), token });

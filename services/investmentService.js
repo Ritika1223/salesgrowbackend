@@ -9,6 +9,7 @@ const {
   percentForLevel,
   investmentAmountError,
   salaryForQualification,
+  coinsForUsdt,
 } = require("../helper/rules");
 
 function roundMoney(value) {
@@ -28,6 +29,16 @@ function isRoiDay(date) {
   return day >= 1 && day <= 6;
 }
 
+function isSameLocalDay(a, b) {
+  const left = new Date(a);
+  const right = new Date(b);
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
 async function creditedToday(userId, date) {
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
@@ -37,7 +48,7 @@ async function creditedToday(userId, date) {
     userId,
     direction: "credit",
     createdAt: { $gte: start, $lt: end },
-    type: { $in: ["SELF_INCOME", "DIRECT_INCOME", "LEVEL_INCOME", "SALARY_INCOME"] },
+    type: { $in: ["SELF_INCOME", "DIRECT_INCOME", "LEVEL_INCOME", "ROI_TO_ROI", "SALARY_INCOME"] },
   }).select("amount");
   return rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 }
@@ -85,6 +96,20 @@ async function acceptInvestment(userId, amount, requestId) {
   user.teamBusiness = Number(user.teamBusiness || 0) + paid;
   await user.save();
 
+  const coins = coinsForUsdt(paid);
+  if (coins > 0) {
+    const coinCredit = await creditWallet(userId, {
+      amount: coins,
+      type: "BUY_COIN",
+      direction: "credit",
+      description: `Fund received $${paid} → ${coins} coins`,
+      transactionId: `${investment._id}-COINS`,
+    });
+    if (!coinCredit.success) {
+      return { success: false, message: coinCredit.message || "Could not credit coins" };
+    }
+  }
+
   let sponsorId = user.referredBy;
   for (let level = 1; sponsorId; level += 1) {
     const sponsor = await User.findById(sponsorId);
@@ -107,10 +132,6 @@ async function acceptInvestment(userId, amount, requestId) {
     sponsorId = sponsor.referredBy;
   }
 
-  if (isRoiDay(startedAt)) {
-    await payDailyRoi(investment, startedAt);
-  }
-
   return { success: true, investment };
 }
 
@@ -124,11 +145,11 @@ async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
     if (teamPercent) {
       await creditCapped(sponsor._id, {
         amount: roundMoney((roi * teamPercent) / 100),
-        type: "LEVEL_INCOME",
+        type: "ROI_TO_ROI",
         direction: "credit",
         fromUserId: investorId,
         level,
-        description: `Team income ${teamPercent}% of ROI`,
+        description: `ROI to ROI income level ${level} (${teamPercent}% of ROI)`,
         transactionId: `${investmentId}-TEAM-${level}-${key}`,
       }, date);
     }
@@ -139,6 +160,8 @@ async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
 async function payDailyRoi(row, now) {
   const key = dayKey(now);
   if (row.lastRoiOn === key) return;
+  // The 1% ROI starts the day after the investment is accepted.
+  if (row.startedAt && isSameLocalDay(row.startedAt, now)) return;
   const roi = roundMoney((Number(row.amount) * INVESTMENT.roiPercent) / 100);
   const credit = await creditCapped(row.userId, {
     amount: roi,

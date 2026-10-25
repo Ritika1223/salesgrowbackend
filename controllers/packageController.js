@@ -6,7 +6,7 @@ const Wallet = require("../models/wallet");
 const Pool = require("../models/Pool");
 const { onUserActivated, distributeDirectIncome, distributeSelfIncome, distributeRankIncome, distributeVipIncome, distributeLevelIncome, addToPool, creditWallet } = require("../services/mlmSercive");
 const { updatePoolRank, updateBonusRank } = require("../services/rankService");
-const { PLANS, LEVEL_RULES } = require("../helper/rules");
+const { PLANS, LEVEL_RULES, roiToRoiMatch } = require("../helper/rules");
 
 const POOL_PERCENT = 12;
 const POOL_LEVELS = 6;
@@ -397,6 +397,22 @@ exports.getIncomeReport = async (req, res) => {
 
     let totalSalaryIncome = salaryIncome[0]?.total || 0;
 
+    const roiToRoiIncome = await Wallet.aggregate([
+      {
+        $match: roiToRoiMatch({
+          userId: new mongoose.Types.ObjectId(authUserId),
+        }),
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    let totalRoiToRoiIncome = roiToRoiIncome[0]?.total || 0;
+
 
     return res.status(200).json({
       sucess: true,
@@ -405,6 +421,7 @@ exports.getIncomeReport = async (req, res) => {
         SalaryIncome: totalSalaryIncome,
         DirectIncome: totalDirectIncome,
         LevelIncome: totalLeveIncome,
+        RoiToRoiIncome: totalRoiToRoiIncome,
         PoolIncome: totalPoolIncome,
         RankIncome: totalRankIncome,
         TotalEarn: user.totalEarning,
@@ -525,6 +542,8 @@ exports.getWalletTransactions = async (req, res) => {
           'LIVE_TIP'
         ]
       }
+    } else if (req.query.type === "ROI_TO_ROI") {
+      Object.assign(filter, roiToRoiMatch());
     } else {
       filter.type = req.query.type;
       filter.direction = "credit";

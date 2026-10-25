@@ -46,6 +46,7 @@ const walletSchema = new mongoose.Schema({
       'CHAT_EARN',
       'LIVE_TIP',
       'LEVEL_INCOME',
+      'ROI_TO_ROI',
       'POOL_INCOME',
       'RANK_BONUS',
       'DIRECT_INCOME',
