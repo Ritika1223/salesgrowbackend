@@ -319,7 +319,9 @@ exports.getIncomeReport = async (req, res) => {
           userId: new mongoose.Types.ObjectId(
             authUserId
           ),
-          type: 'SELF_INCOME'
+          type: 'SELF_INCOME',
+          direction: 'credit',
+          description: { $regex: '^1% daily ROI', $options: 'i' }
         }
       },
       {
@@ -530,21 +532,34 @@ exports.getWalletTransactions = async (req, res) => {
       filter.createdAt = { $gte: startDate };
     }
 
-    if (req.query.type === "SELF_INCOME") {
-      filter.direction = "credit";
-      filter.type = {
-        $in: [
-          'BUY_COIN',
-          'TOPUP',
-          'REFERRAL_BONUS',
-          'CHAT_SPEND',
-          'CHAT_EARN',
-          'LIVE_TIP'
-        ]
-      }
-    } else if (req.query.type === "ROI_TO_ROI") {
+    const COIN_TYPES = [
+      "BUY_COIN",
+      "TOPUP",
+      "REFERRAL_BONUS",
+      "CHAT_SPEND",
+      "CHAT_EARN",
+      "LIVE_TIP",
+      "ADMIN_ADJUST",
+    ];
+
+    if (COIN_TYPES.includes(String(req.query.type || ""))) {
+      return res.status(200).json({
+        success: true,
+        page,
+        limit,
+        total: 0,
+        pages: 0,
+        data: [],
+      });
+    }
+
+    if (req.query.type === "ROI_TO_ROI") {
       Object.assign(filter, roiToRoiMatch());
-    } else {
+    } else if (req.query.type === "SELF_INCOME") {
+      filter.type = "SELF_INCOME";
+      filter.direction = "credit";
+      filter.description = { $regex: "^1% daily ROI", $options: "i" };
+    } else if (req.query.type) {
       filter.type = req.query.type;
       filter.direction = "credit";
     }

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Investment = require("../models/Investment");
 const Wallet = require("../models/wallet");
 const wallet = require('../models/wallet');
 const Message = require("../models/Message");
@@ -404,40 +405,15 @@ exports.getMe = async (req, res) => {
     if (user.isModified()) {
       await user.save();
     }
-    const allowedTypes = [
-      'TOPUP',
-      'REFERRAL_BONUS',
-      'CHAT_SPEND',
-      'CHAT_EARN',
-      'LIVE_TIP'
-    ];
-
-    const earn = await Wallet.aggregate([
-      {
-        $match: {
-          userId:
-            new mongoose.Types.ObjectId(
-              id
-            ),
-          type: {
-            $in:
-              allowedTypes
-          }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          total: {
-            $sum:
-              '$amount'
-          }
-        }
-      }
-    ]);
-
-    const totalEarn = earn[0]?.total || 0;
-    res.json({ user: publicUser(user, totalEarn) });
+    const totalEarn = Number(user.totalEarning) || 0;
+    const investment = await Investment.findOne({
+      userId: user._id,
+      status: "active",
+    }).sort({ startedAt: -1 });
+    const payload = publicUser(user, totalEarn);
+    payload.planAmount = Number(investment?.amount) || 0;
+    if (investment) payload.isActive = true;
+    res.json({ user: payload });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
