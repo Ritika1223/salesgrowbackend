@@ -90,6 +90,43 @@ function roiToRoiMatch(extra = {}) {
   };
 }
 
+/** Level 1 of a new fund. Older rows say "Direct Referral Income" and have no level. */
+function directIncomeMatch(extra = {}) {
+  return {
+    direction: "credit",
+    type: "DIRECT_INCOME",
+    ...extra,
+    $nor: [
+      { level: { $gte: 2 } },
+      { description: { $regex: "level\\s*([2-9]|1\\d)", $options: "i" } },
+      { description: { $regex: "^ROI to ROI", $options: "i" } },
+      { description: { $regex: "level income", $options: "i" } },
+    ],
+  };
+}
+
+/** Team levels below the direct sponsor, including older rows saved as direct income. */
+function levelIncomeMatch(extra = {}) {
+  return {
+    direction: "credit",
+    ...extra,
+    $or: [
+      {
+        type: "LEVEL_INCOME",
+        description: { $not: { $regex: "^ROI to ROI", $options: "i" } },
+      },
+      {
+        type: "DIRECT_INCOME",
+        level: { $gte: 2 },
+      },
+      {
+        type: "DIRECT_INCOME",
+        description: { $regex: "level\\s*([2-9]|1\\d)", $options: "i" },
+      },
+    ],
+  };
+}
+
 function percentForLevel(table, level) {
   const row = table.find((item) => level >= item.from && level <= item.to);
   return row ? row.percent : 0;
@@ -134,6 +171,8 @@ module.exports = {
   TEAM_LEVELS,
   SALARY_SLABS,
   roiToRoiMatch,
+  directIncomeMatch,
+  levelIncomeMatch,
   percentForLevel,
   investmentAmountError,
   salaryForQualification,

@@ -119,14 +119,15 @@ async function acceptInvestment(userId, amount, requestId) {
 
     const directPercent = percentForLevel(DIRECT_LEVELS, level);
     if (directPercent) {
+      const isDirect = level === 1;
       await creditCapped(sponsor._id, {
         amount: roundMoney((paid * directPercent) / 100),
-        type: "DIRECT_INCOME",
+        type: isDirect ? "DIRECT_INCOME" : "LEVEL_INCOME",
         direction: "credit",
         fromUserId: userId,
         level,
-        description: `Direct income level ${level}`,
-        transactionId: `${investment._id}-DIRECT-${level}-${sponsor._id}`,
+        description: isDirect ? "Direct income" : `Level income level ${level}`,
+        transactionId: `${investment._id}-${isDirect ? "DIRECT" : "LEVEL"}-${level}-${sponsor._id}`,
       }, startedAt);
     }
     sponsorId = sponsor.referredBy;

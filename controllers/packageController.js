@@ -6,7 +6,7 @@ const Wallet = require("../models/wallet");
 const Pool = require("../models/Pool");
 const { onUserActivated, distributeDirectIncome, distributeSelfIncome, distributeRankIncome, distributeVipIncome, distributeLevelIncome, addToPool, creditWallet } = require("../services/mlmSercive");
 const { updatePoolRank, updateBonusRank } = require("../services/rankService");
-const { PLANS, LEVEL_RULES, roiToRoiMatch } = require("../helper/rules");
+const { PLANS, LEVEL_RULES, roiToRoiMatch, directIncomeMatch, levelIncomeMatch } = require("../helper/rules");
 
 const POOL_PERCENT = 12;
 const POOL_LEVELS = 6;
@@ -132,12 +132,9 @@ exports.getReportStats = async (req, res) => {
 
     const levelIncome = await Wallet.aggregate([
       {
-        $match: {
-          userId: new mongoose.Types.ObjectId(
-            authUserId
-          ),
-          type: 'LEVEL_INCOME'
-        }
+        $match: levelIncomeMatch({
+          userId: new mongoose.Types.ObjectId(authUserId),
+        })
       },
       {
         $group: {
@@ -272,12 +269,9 @@ exports.getIncomeReport = async (req, res) => {
 
     const levelIncome = await Wallet.aggregate([
       {
-        $match: {
-          userId: new mongoose.Types.ObjectId(
-            authUserId
-          ),
-          type: 'LEVEL_INCOME'
-        }
+        $match: levelIncomeMatch({
+          userId: new mongoose.Types.ObjectId(authUserId),
+        })
       },
       {
         $group: {
@@ -338,12 +332,9 @@ exports.getIncomeReport = async (req, res) => {
 
     const directIncome = await Wallet.aggregate([
       {
-        $match: {
-          userId: new mongoose.Types.ObjectId(
-            authUserId
-          ),
-          type: 'DIRECT_INCOME'
-        }
+        $match: directIncomeMatch({
+          userId: new mongoose.Types.ObjectId(authUserId),
+        })
       },
       {
         $group: {
@@ -559,6 +550,10 @@ exports.getWalletTransactions = async (req, res) => {
       filter.type = "SELF_INCOME";
       filter.direction = "credit";
       filter.description = { $regex: "^1% daily ROI", $options: "i" };
+    } else if (req.query.type === "DIRECT_INCOME") {
+      Object.assign(filter, directIncomeMatch());
+    } else if (req.query.type === "LEVEL_INCOME") {
+      Object.assign(filter, levelIncomeMatch());
     } else if (req.query.type) {
       filter.type = req.query.type;
       filter.direction = "credit";
