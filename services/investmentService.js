@@ -140,8 +140,12 @@ async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
   const investor = await User.findById(investorId).select("referredBy");
   let sponsorId = investor?.referredBy;
   for (let level = 1; level <= 21 && sponsorId; level += 1) {
-    const sponsor = await User.findById(sponsorId).select("referredBy");
+    const sponsor = await User.findById(sponsorId).select("referredBy roiStopped");
     if (!sponsor) break;
+    if (sponsor.roiStopped) {
+      sponsorId = sponsor.referredBy;
+      continue;
+    }
     const teamPercent = percentForLevel(TEAM_LEVELS, level);
     if (teamPercent) {
       await creditCapped(sponsor._id, {
@@ -159,6 +163,8 @@ async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
 }
 
 async function payDailyRoi(row, now) {
+  const investor = await User.findById(row.userId).select("roiStopped");
+  if (investor?.roiStopped) return;
   const key = dayKey(now);
   if (row.lastRoiOn === key) return;
   // The 1% ROI starts the day after the investment is accepted.

@@ -9,7 +9,8 @@ const HostRequest = require("../models/HostRequest");
 const PaymentHistory = require("../models/PaymentHistory");
 const UserActivity = require("../models/UserActivity");
 const Support = require("../models/Support");
-const { roiToRoiMatch } = require("../helper/rules");
+const Investment = require("../models/Investment");
+const { roiToRoiMatch, crownForInvestment } = require("../helper/rules");
 
 exports.listRoiToRoiIncome = async (req, res) => {
   try {
@@ -284,6 +285,76 @@ exports.listAllGroups = async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
     return res.json({ groups, count: groups.length });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.listUserControls = async (req, res) => {
+  try {
+    const [users, investments] = await Promise.all([
+      User.find()
+        .select("name email phone referralCode roiStopped withdrawStopped isActive plan")
+        .sort({ createdAt: -1 })
+        .lean(),
+      Investment.find({ status: "active", endsAt: { $gt: new Date() } })
+        .select("userId amount")
+        .lean(),
+    ]);
+
+    const totals = new Map();
+    for (const row of investments) {
+      const key = String(row.userId);
+      totals.set(key, (totals.get(key) || 0) + Number(row.amount || 0));
+    }
+
+    const data = users.map((user) => {
+      const investmentAmount = totals.get(String(user._id)) || 0;
+      return {
+        ...user,
+        investmentAmount,
+        crown: crownForInvestment(investmentAmount),
+      };
+    });
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.setUserControl = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const update = {};
+    if (req.body?.roiStopped !== undefined) update.roiStopped = Boolean(req.body.roiStopped);
+    if (req.body?.withdrawStopped !== undefined) {
+      update.withdrawStopped = Boolean(req.body.withdrawStopped);
+    }
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ message: "Nothing to update" });
+    }
+
+    const user = await User.findByIdAndUpdate(id, update, { new: true }).select(
+      "name email phone referralCode roiStopped withdrawStopped"
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const stoppedRoi = update.roiStopped === true;
+    const resumedRoi = update.roiStopped === false;
+    const stoppedWithdraw = update.withdrawStopped === true;
+    const resumedWithdraw = update.withdrawStopped === false;
+    let message = "User control updated";
+    if (stoppedRoi) message = "ROI stopped for this user";
+    else if (resumedRoi) message = "ROI resumed for this user";
+    else if (stoppedWithdraw) message = "Withdrawal stopped for this user";
+    else if (resumedWithdraw) message = "Withdrawal resumed for this user";
+
+    return res.json({ message, user });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

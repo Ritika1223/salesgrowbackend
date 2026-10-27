@@ -6,6 +6,7 @@ const Group = require("../models/Group");
 const Conversation = require("../models/Conversation");
 const Sticker = require("../models/Sticker");
 const LiveSession = require("../models/LiveSession");
+const Investment = require("../models/Investment");
 const { notifyNewChatMessage, previewText } = require("../helper/pushNotify");
 const path = require("path");
 const fs = require("fs");
@@ -29,6 +30,30 @@ const CHAT_COIN_TYPES = [
 ];
 const HOST_EARN_TYPES = ["CHAT_EARN", "LIVE_TIP"];
 
+async function withInvestmentAmounts(users) {
+  if (!Array.isArray(users) || users.length === 0) return users || [];
+  const ids = users.map((user) => user._id).filter(Boolean);
+  const rows = await Investment.find({
+    userId: { $in: ids },
+    status: "active",
+    endsAt: { $gt: new Date() },
+  }).select("userId amount").lean();
+
+  const totals = new Map();
+  for (const row of rows) {
+    const key = String(row.userId);
+    totals.set(key, (totals.get(key) || 0) + Number(row.amount || 0));
+  }
+
+  return users.map((user) => {
+    const plain = typeof user.toObject === "function" ? user.toObject() : user;
+    return {
+      ...plain,
+      planAmount: totals.get(String(plain._id)) || 0,
+    };
+  });
+}
+
 // GET USERS
 
 exports.getUsers = async (req, res) => {
@@ -42,7 +67,7 @@ exports.getUsers = async (req, res) => {
       'LIVE_TIP'
     ];
 
-    const users = await User.aggregate([
+    const users = await withInvestmentAmounts(await User.aggregate([
       
       {
         $lookup: {
@@ -161,7 +186,7 @@ exports.getUsers = async (req, res) => {
 
         }
       }
-    ]);
+    ]));
     return res.status(200).json({
       success: true,
       count: users.length,
@@ -188,11 +213,11 @@ exports.getUsersNotBlockedMe = async (req, res) => {
 
     // Find users where their blockedUsers does NOT include myId
     // And exclude myself from the users list if needed
-    const users = await User.find({
+    const users = await withInvestmentAmounts(await User.find({
       _id: { $ne: myId }, // exclude myself
       blockedUsers: { $ne: myId }, // users who have NOT blocked me
       isDisabled: { $ne: true },
-    }).select("-password");
+    }).select("-password"));
 
     res.status(200).json({
       success: true,

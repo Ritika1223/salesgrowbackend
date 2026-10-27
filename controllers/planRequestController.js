@@ -107,7 +107,7 @@ exports.createPlanRequest = async (req, res) => {
 
     return res.status(201).json({
       message:
-        "Admin will contact you as soon as possible. Confirmation time is maximum 20 minutes.",
+        "Admin will contact you as soon as possible.",
       data: request,
     });
   } catch (err) {

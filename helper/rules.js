@@ -151,6 +151,15 @@ function investmentAmountError(amount) {
   return "";
 }
 
+/** Crown from the user's active investment. $50–$249.99, $250–$999.99, $1000+. */
+function crownForInvestment(amount) {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value < 50) return null;
+  if (value < 250) return { level: 1, label: "1st Crown" };
+  if (value < 1000) return { level: 2, label: "2nd Crown" };
+  return { level: 3, label: "3rd Crown" };
+}
+
 function salaryForQualification(selfAmount, legAmounts) {
   const self = Number(selfAmount) || 0;
   const legs = Array.isArray(legAmounts) ? legAmounts.map((n) => Number(n) || 0) : [];
@@ -177,4 +186,5 @@ module.exports = {
   investmentAmountError,
   salaryForQualification,
   coinsForUsdt,
+  crownForInvestment,
 };

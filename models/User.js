@@ -51,6 +51,16 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  /** Admin can pause this user's daily ROI without closing the investment. */
+  roiStopped: {
+    type: Boolean,
+    default: false
+  },
+  /** Admin can block new withdrawal requests for this user. */
+  withdrawStopped: {
+    type: Boolean,
+    default: false
+  },
 
   profilePhoto: {
     type: String,

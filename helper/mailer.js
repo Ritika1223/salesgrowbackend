@@ -48,14 +48,19 @@ async function sendMail({ to, subject, html, text }) {
     );
     return { skipped: true };
   }
-  await transporter.sendMail({
-    from: fromAddress(),
-    to,
-    subject,
-    html,
-    text: text || html.replace(/<[^>]+>/g, " "),
-  });
-  return { skipped: false };
+  try {
+    await transporter.sendMail({
+      from: fromAddress(),
+      to,
+      subject,
+      html,
+      text: text || html.replace(/<[^>]+>/g, " "),
+    });
+    return { skipped: false };
+  } catch (err) {
+    console.error("sendMail failed:", err.message);
+    return { skipped: true };
+  }
 }
 
 function wrapHtml(title, body) {
@@ -96,7 +101,7 @@ async function notifyUserHostRequestReceived(email, name) {
       "Request received",
       `<p>Hi ${name || "there"},</p>
        <p>Your request to become a host has been sent to admin. Admin will contact you as soon as possible.</p>
-       <p><strong>Confirmation time is maximum 20 minutes.</strong></p>`
+       `
     ),
   });
 }
@@ -143,7 +148,7 @@ async function notifyUserPlanRequestReceived(email, name, planName) {
       "Request received",
       `<p>Hi ${name || "there"},</p>
        <p>Your request to activate the <strong>${planName || "plan"}</strong> has been sent to admin.</p>
-       <p>Admin will contact you as soon as possible. <strong>Confirmation time is maximum 20 minutes.</strong></p>`
+       <p>Admin will contact you as soon as possible.</p>`
     ),
   });
 }

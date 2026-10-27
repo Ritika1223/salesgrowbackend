@@ -118,6 +118,8 @@ function publicUser(user, totalearn) {
     hostApproved: Boolean(user.hostApproved) || user.profileMode === "host",
     createdAt: user.createdAt,
     isActive: user.isActive,
+    roiStopped: Boolean(user.roiStopped),
+    withdrawStopped: Boolean(user.withdrawStopped),
     updatedAt: user.updatedAt,
     poolRank: user.poolRank || null,
     bonusRank: user.bonusRank || null,

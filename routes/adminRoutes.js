@@ -21,6 +21,8 @@ router.use(requireAdmin);
 
 // Admin Data
 router.get("/users", adminDataController.listAllUsers);
+router.get("/user-controls", adminDataController.listUserControls);
+router.patch("/users/:id/controls", adminDataController.setUserControl);
 router.get("/income/roi-to-roi", adminDataController.listRoiToRoiIncome);
 router.get("/groups", adminDataController.listAllGroups);
 router.patch("/users/:id/status", adminDataController.setUserDisabled);

@@ -554,6 +554,20 @@ exports.getWalletTransactions = async (req, res) => {
       Object.assign(filter, directIncomeMatch());
     } else if (req.query.type === "LEVEL_INCOME") {
       Object.assign(filter, levelIncomeMatch());
+    } else if (req.query.type === "INCOME") {
+      filter.type = {
+        $in: [
+          "SELF_INCOME",
+          "DIRECT_INCOME",
+          "LEVEL_INCOME",
+          "ROI_TO_ROI",
+          "SALARY_INCOME",
+          "POOL_INCOME",
+          "RANK_BONUS",
+          "VIP_INCOME",
+          "WITHDRAW",
+        ],
+      };
     } else if (req.query.type) {
       filter.type = req.query.type;
       filter.direction = "credit";

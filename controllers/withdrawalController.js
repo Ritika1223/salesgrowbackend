@@ -39,8 +39,11 @@ exports.createWithdrawal = async (req, res) => {
     }
     if (!upiId) return res.status(400).json({ message: "UPI ID is required" });
 
-    const user = await User.findById(userId).select("+password +transactionPassword walletBalance totalEarning totalWithdraw");
+    const user = await User.findById(userId).select("+password +transactionPassword walletBalance totalEarning totalWithdraw roiStopped withdrawStopped");
     if (!user) return res.status(404).json({ message: "User not found" });
+    if (user.withdrawStopped) {
+      return res.status(403).json({ message: "Withdrawal is stopped for your account. Please contact admin." });
+    }
 
     const currentTx = String(user.transactionPassword || "").trim()
       ? user.transactionPassword
