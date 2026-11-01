@@ -9,6 +9,7 @@ const paymentHistoryController = require('../controllers/paymentHistoryControlle
 const hostRequestController = require("../controllers/hostRequestController");
 const planRequestController = require("../controllers/planRequestController");
 const withdrawalController = require("../controllers/withdrawalController");
+const coinWithdrawalController = require("../controllers/coinWithdrawalController");
 
 const { requireAdmin } = require("../middleware/adminAuth");
 const upload = require("../middleware/upload");
@@ -64,6 +65,8 @@ router.patch(
 
 router.get("/withdrawals", withdrawalController.listWithdrawals);
 router.patch("/withdrawals/:id/status", withdrawalController.updateWithdrawalStatus);
+router.get("/coin-withdrawals", coinWithdrawalController.listCoinWithdrawals);
+router.patch("/coin-withdrawals/:id/status", coinWithdrawalController.updateCoinWithdrawalStatus);
 
 router.get("/plan-requests", planRequestController.listPlanRequests);
 router.patch(

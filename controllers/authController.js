@@ -543,7 +543,7 @@ exports.getMyTeam = async (req, res) => {
     }
 
     const me = await User.findById(id)
-      .select("name nickname referralCode")
+      .select("name nickname referralCode isActive")
       .lean();
     const select = "name nickname phone referralCode isActive plan createdAt referredBy";
     const levels = [];
@@ -581,6 +581,7 @@ exports.getMyTeam = async (req, res) => {
         name: me?.name || "",
         nickname: me?.nickname || "",
         referralCode: me?.referralCode || "",
+        isActive: Boolean(me?.isActive),
       },
       directs: levels[0]?.members || [],
       levels,

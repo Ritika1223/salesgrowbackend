@@ -6,6 +6,7 @@ const Token = require("../middleware/frontAuthMiddleware");
 const upload = require ("../middleware/upload");
 const bankController = require('../controllers/bankController');
 const paymentHistoryController = require('../controllers/paymentHistoryController');
+const coinWithdrawalController = require("../controllers/coinWithdrawalController");
 
 
 router.get("/users", chatController.getUsers);
@@ -64,6 +65,8 @@ router.delete(
 router.get("/dm-preview/:userId/:peerId", chatController.getDmPreview);
 router.post("/start-dm", chatController.startDirectMessage);
 router.get("/wallet", Token.Validate, chatController.getWalletAmount);
+router.get("/coin-withdraw/mine", Token.Validate, coinWithdrawalController.myCoinWithdrawals);
+router.post("/coin-withdraw", Token.Validate, coinWithdrawalController.createCoinWithdrawal);
 router.get("/wallet/:userId/transactions", chatController.getWalletTransactions);
 router.post("/wallet/topup", chatController.topupWallet);
 

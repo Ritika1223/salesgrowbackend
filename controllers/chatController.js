@@ -14,7 +14,7 @@ const upload = require("../middleware/upload")
 
 const COINS_PER_RUPEE = 10;
 const TEXT_MESSAGE_COST = 2;
-const NEW_DM_START_COST = 50;
+const NEW_DM_START_COST = 10;
 const LIVE_VIEWER_TEXT_COINS = 2;
 
 /** Coin ledger used by chat, live, host earnings, and coin purchases. */
@@ -26,6 +26,7 @@ const CHAT_COIN_TYPES = [
   "LIVE_TIP",
   "ADMIN_ADJUST",
   "REFERRAL_BONUS",
+  "WITHDRAW",
 ];
 const HOST_EARN_TYPES = ["CHAT_EARN", "LIVE_TIP"];
 
