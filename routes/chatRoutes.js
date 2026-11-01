@@ -15,6 +15,7 @@ router.get("/potential-members", chatController.getUsersNotInGroupAndNotBlockedM
 
 
 router.post("/live/start", liveController.startLive);
+router.post("/live/sign-out", liveController.signOutLive);
 router.post("/live/:sessionId/end", liveController.endLive);
 router.get("/live/active", liveController.listActiveLives);
 router.post("/live/:sessionId/join", liveController.joinLive);

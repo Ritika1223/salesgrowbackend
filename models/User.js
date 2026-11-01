@@ -156,7 +156,7 @@ const userSchema = new mongoose.Schema({
   },
   freeMessagesRemaining: {
     type: Number,
-    default: 50,
+    default: 0,
     min: 0
   },
   /** "user" = DM + join live only. "host" = groups + start live + DM. */

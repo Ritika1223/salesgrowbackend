@@ -113,7 +113,6 @@ function publicUser(user, totalearn) {
     walletBalance: user.walletBalance,
     walletBalanceRupees: (Number(user.walletBalance) || 0) / COINS_PER_RUPEE,
     coinsPerRupee: COINS_PER_RUPEE,
-    freeMessagesRemaining: user.freeMessagesRemaining,
     profileMode: user.profileMode || "user",
     hostApproved: Boolean(user.hostApproved) || user.profileMode === "host",
     createdAt: user.createdAt,
@@ -543,7 +542,10 @@ exports.getMyTeam = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const select = "name nickname phone referralCode isActive plan createdAt";
+    const me = await User.findById(id)
+      .select("name nickname referralCode")
+      .lean();
+    const select = "name nickname phone referralCode isActive plan createdAt referredBy";
     const levels = [];
     let parentIds = [id];
 
@@ -554,7 +556,7 @@ exports.getMyTeam = async (req, res) => {
       }
       const members = await User.find({ referredBy: { $in: parentIds } })
         .select(select)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: 1 })
         .lean();
       levels.push({
         level,
@@ -567,12 +569,19 @@ exports.getMyTeam = async (req, res) => {
           isActive: Boolean(member.isActive),
           plan: member.plan || "",
           joinedAt: member.createdAt || null,
+          referredBy: member.referredBy ? String(member.referredBy) : "",
         })),
       });
       parentIds = members.map((member) => member._id);
     }
 
     return res.json({
+      me: {
+        id: String(id),
+        name: me?.name || "",
+        nickname: me?.nickname || "",
+        referralCode: me?.referralCode || "",
+      },
       directs: levels[0]?.members || [],
       levels,
     });

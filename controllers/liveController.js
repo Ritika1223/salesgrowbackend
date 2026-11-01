@@ -9,7 +9,7 @@ exports.startLive = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: "userId required" });
     }
-    const host = await User.findById(userId).select("_id name profileMode");
+    const host = await User.findById(userId).select("_id name nickname profileMode");
     if (!host) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -36,18 +36,53 @@ exports.startLive = async (req, res) => {
 
     const session = await LiveSession.create({
       hostId: userId,
-      title: String(title || "").trim() || `${host.name || "Host"}'s live`,
+      title: String(title || "").trim() || `${host.nickname || host.name || "Host"}'s live`,
       status: "active",
       participantIds: [userId],
     });
 
     const populated = await LiveSession.findById(session._id)
-      .populate("hostId", "name profilePhoto gallery")
+      .populate("hostId", "name nickname profilePhoto gallery")
       .lean();
 
     return res.json({
       session: populated,
     });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+/** POST body: { userId } — end lives this user is hosting and leave lives they joined. */
+exports.signOutLive = async (req, res) => {
+  try {
+    const userId = req.body?.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "userId required" });
+    }
+
+    const endingSessions = await LiveSession.find({
+      hostId: userId,
+      status: "active",
+    })
+      .select("_id")
+      .lean();
+    const endingIds = endingSessions.map((session) => session._id);
+    if (endingIds.length) {
+      await Message.deleteMany({ liveSessionId: { $in: endingIds } });
+    }
+    await LiveSession.updateMany(
+      { hostId: userId, status: "active" },
+      { $set: { status: "ended", endedAt: new Date() } },
+    );
+
+    await LiveSession.updateMany(
+      { status: "active", participantIds: userId },
+      { $pull: { participantIds: userId } },
+    );
+
+    return res.json({ ok: true, ended: endingIds.length });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: err.message || "Server error" });
@@ -85,7 +120,7 @@ exports.listActiveLives = async (req, res) => {
   try {
     const sessions = await LiveSession.find({ status: "active" })
       .sort({ createdAt: -1 })
-      .populate("hostId", "name profilePhoto gallery")
+      .populate("hostId", "name nickname profilePhoto gallery")
       .lean();
 
     const out = sessions.map((s) => ({
@@ -119,7 +154,7 @@ exports.joinLive = async (req, res) => {
       await session.save();
     }
     const populated = await LiveSession.findById(session._id)
-      .populate("hostId", "name profilePhoto gallery")
+      .populate("hostId", "name nickname profilePhoto gallery")
       .lean();
     return res.json({
       session: populated,
@@ -135,7 +170,7 @@ exports.getLiveMessages = async (req, res) => {
   try {
     const { sessionId } = req.params;
     const session = await LiveSession.findById(sessionId)
-      .populate("hostId", "name profilePhoto gallery")
+      .populate("hostId", "name nickname profilePhoto gallery")
       .lean();
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
@@ -144,14 +179,14 @@ exports.getLiveMessages = async (req, res) => {
     const rows = await Message.find({ liveSessionId: sessionId })
       .sort({ createdAt: 1 })
       .limit(300)
-      .populate("senderId", "name")
+      .populate("senderId", "name nickname")
       .lean();
 
     const messages = rows.map((row) => {
       const m = { ...row };
       m.type = m.messageType || m.type;
       if (m.senderId && typeof m.senderId === "object") {
-        m.senderName = m.senderId.name;
+        m.senderName = m.senderId.nickname || m.senderId.name;
         m.senderId = m.senderId._id;
       }
       return m;

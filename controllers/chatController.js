@@ -13,8 +13,7 @@ const fs = require("fs");
 const upload = require("../middleware/upload")
 
 const COINS_PER_RUPEE = 10;
-const FREE_MESSAGES_ON_SIGNUP = 50;
-const TEXT_MESSAGE_COST_AFTER_FREE = 2;
+const TEXT_MESSAGE_COST = 2;
 const NEW_DM_START_COST = 50;
 const LIVE_VIEWER_TEXT_COINS = 2;
 
@@ -135,7 +134,6 @@ exports.getUsers = async (req, res) => {
           walletBalance: 1,
           totalEarning: 1,
           totalWithdraw: 1,
-          freeMessagesRemaining: 1,
           profileMode: 1,
           followers: 1,
           sex: 1,
@@ -737,21 +735,13 @@ exports.sendMessage = async (req, res) => {
       } else if (hostOutboundDm) {
         // no charge
       } else if (userToHostDm) {
-        cost += TEXT_MESSAGE_COST_AFTER_FREE;
+        cost += TEXT_MESSAGE_COST;
         reason = sendType;
       } else {
-        const remaining = Number.isFinite(sender.freeMessagesRemaining)
-          ? sender.freeMessagesRemaining
-          : FREE_MESSAGES_ON_SIGNUP;
-
-        if (remaining > 0) {
-          sender.freeMessagesRemaining = Math.max(0, remaining - 1);
-        } else {
-          cost += TEXT_MESSAGE_COST_AFTER_FREE;
-          reason = reason === "new_dm"
-            ? ("new_dm_" + sendType)
-            : sendType;
-        }
+        cost += TEXT_MESSAGE_COST;
+        reason = reason === "new_dm"
+          ? ("new_dm_" + sendType)
+          : sendType;
       }
     }
 
@@ -909,7 +899,6 @@ exports.sendMessage = async (req, res) => {
       data: newMessage,
       remainingBalance: sender.walletBalance, // coins
       remainingBalanceRupees: (Number(sender.walletBalance) || 0) / COINS_PER_RUPEE,
-      freeMessagesRemaining: sender.freeMessagesRemaining,
       coinsPerRupee: COINS_PER_RUPEE
     });
 
@@ -1152,7 +1141,7 @@ exports.getDmPreview = async (req, res) => {
           { senderId: peerId, receiverId: userId, groupId: null, liveSessionId: null },
         ],
       }),
-      User.findById(userId).select("walletBalance"),
+      User.findById(userId).select("walletBalance profileMode"),
     ]);
 
     if (!user) {
@@ -1160,10 +1149,12 @@ exports.getDmPreview = async (req, res) => {
     }
 
     const hasThread = Boolean(existing) || priorDmCount > 0;
+    const senderIsHost = (user.profileMode || "user") === "host";
 
     return res.json({
       isNewDm: !hasThread,
-      newDmCost: NEW_DM_START_COST,
+      newDmCost: senderIsHost ? 0 : NEW_DM_START_COST,
+      hostDmFree: senderIsHost,
       walletBalance: Number(user.walletBalance) || 0,
     });
   } catch (error) {
@@ -1196,10 +1187,34 @@ exports.startDirectMessage = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    const senderIsHost = (user.profileMode || "user") === "host";
+
     if (existing || priorDmCount > 0) {
       return res.json({
         ok: true,
         alreadyStarted: true,
+        hostDmFree: senderIsHost,
+        remainingBalance: Number(user.walletBalance) || 0,
+        conversationId,
+      });
+    }
+
+    if (senderIsHost) {
+      await Conversation.create({
+        conversationId,
+        isGroup: false,
+        participants: [userId, peerId],
+        lastMessage: "",
+        lastMessageType: "system",
+        lastSenderId: userId,
+        lastMessageTime: new Date(),
+      });
+
+      return res.json({
+        ok: true,
+        alreadyStarted: false,
+        deducted: 0,
+        hostDmFree: true,
         remainingBalance: Number(user.walletBalance) || 0,
         conversationId,
       });
