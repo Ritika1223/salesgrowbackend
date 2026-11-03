@@ -160,11 +160,11 @@ function crownForInvestment(amount) {
   return { level: 3, label: "3rd Crown" };
 }
 
-function salaryForQualification(selfAmount, legAmounts) {
+function salaryForQualification(selfAmount, legAmounts, slabs = SALARY_SLABS) {
   const self = Number(selfAmount) || 0;
   const legs = Array.isArray(legAmounts) ? legAmounts.map((n) => Number(n) || 0) : [];
   let monthly = 0;
-  for (const slab of SALARY_SLABS) {
+  for (const slab of slabs) {
     const qualified = legs.filter((amount) => amount >= slab.leg).length;
     if (self >= slab.self && qualified >= slab.legs) monthly = slab.monthly;
   }

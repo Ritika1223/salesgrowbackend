@@ -11,6 +11,7 @@ const UserActivity = require("../models/UserActivity");
 const Support = require("../models/Support");
 const Investment = require("../models/Investment");
 const { roiToRoiMatch, crownForInvestment } = require("../helper/rules");
+const { getIncomeSettings, saveIncomeSettings } = require("../helper/incomeSettings");
 
 exports.listRoiToRoiIncome = async (req, res) => {
   try {
@@ -355,6 +356,28 @@ exports.setUserControl = async (req, res) => {
     else if (resumedWithdraw) message = "Withdrawal resumed for this user";
 
     return res.json({ message, user });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getIncomeSettings = async (req, res) => {
+  try {
+    const settings = await getIncomeSettings();
+    return res.json({ settings });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.updateIncomeSettings = async (req, res) => {
+  try {
+    const saved = await saveIncomeSettings(req.body || {});
+    if (saved.error) return res.status(400).json({ message: saved.error });
+    return res.json({
+      message: "Saved. The new rate applies from today. Earlier payouts stay the same.",
+      settings: saved.settings,
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

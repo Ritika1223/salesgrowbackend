@@ -4,13 +4,12 @@ const Investment = require("../models/Investment");
 const { creditWallet } = require("./mlmSercive");
 const {
   INVESTMENT,
-  DIRECT_LEVELS,
-  TEAM_LEVELS,
   percentForLevel,
   investmentAmountError,
   salaryForQualification,
   coinsForUsdt,
 } = require("../helper/rules");
+const { getIncomeSettings } = require("../helper/incomeSettings");
 
 function roundMoney(value) {
   return Math.round(Number(value) * 100) / 100;
@@ -110,6 +109,7 @@ async function acceptInvestment(userId, amount, requestId) {
     }
   }
 
+  const incomeSettings = await getIncomeSettings();
   let sponsorId = user.referredBy;
   for (let level = 1; sponsorId; level += 1) {
     const sponsor = await User.findById(sponsorId);
@@ -117,7 +117,7 @@ async function acceptInvestment(userId, amount, requestId) {
     sponsor.teamBusiness = Number(sponsor.teamBusiness || 0) + paid;
     await sponsor.save();
 
-    const directPercent = percentForLevel(DIRECT_LEVELS, level);
+    const directPercent = percentForLevel(incomeSettings.levels, level);
     if (directPercent) {
       const isDirect = level === 1;
       await creditCapped(sponsor._id, {
@@ -136,7 +136,7 @@ async function acceptInvestment(userId, amount, requestId) {
   return { success: true, investment };
 }
 
-async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
+async function payTeamOnRoi(investorId, roi, investmentId, key, date, teamLevels) {
   const investor = await User.findById(investorId).select("referredBy");
   let sponsorId = investor?.referredBy;
   for (let level = 1; level <= 21 && sponsorId; level += 1) {
@@ -146,7 +146,7 @@ async function payTeamOnRoi(investorId, roi, investmentId, key, date) {
       sponsorId = sponsor.referredBy;
       continue;
     }
-    const teamPercent = percentForLevel(TEAM_LEVELS, level);
+    const teamPercent = percentForLevel(teamLevels, level);
     if (teamPercent) {
       await creditCapped(sponsor._id, {
         amount: roundMoney((roi * teamPercent) / 100),
@@ -167,18 +167,20 @@ async function payDailyRoi(row, now) {
   if (investor?.roiStopped) return;
   const key = dayKey(now);
   if (row.lastRoiOn === key) return;
-  // The 1% ROI starts the day after the investment is accepted.
+  // ROI starts the day after the investment is accepted. A new percent applies only to payouts from the day it is saved.
   if (row.startedAt && isSameLocalDay(row.startedAt, now)) return;
-  const roi = roundMoney((Number(row.amount) * INVESTMENT.roiPercent) / 100);
+  const settings = await getIncomeSettings();
+  const roiPercent = Number(settings.roiPercent);
+  const roi = roundMoney((Number(row.amount) * roiPercent) / 100);
   const credit = await creditCapped(row.userId, {
     amount: roi,
     type: "SELF_INCOME",
     direction: "credit",
-    description: "1% daily ROI (USD)",
+    description: `${roiPercent}% daily ROI (USD)`,
     transactionId: `${row._id}-ROI-${key}`,
   }, now);
   if (credit.success && !credit.skipped) {
-    await payTeamOnRoi(row.userId, roi, row._id, key, now);
+    await payTeamOnRoi(row.userId, roi, row._id, key, now, settings.roiToRoi);
     row.lastRoiOn = key;
     await row.save();
   }
@@ -193,9 +195,11 @@ async function monthlySalary(userId) {
   const directs = user?.directs?.length
     ? await User.find({ _id: { $in: user.directs } }).select("teamBusiness")
     : [];
+  const settings = await getIncomeSettings();
   return salaryForQualification(
     self,
-    directs.map((direct) => direct.teamBusiness)
+    directs.map((direct) => direct.teamBusiness),
+    settings.salary
   );
 }
 

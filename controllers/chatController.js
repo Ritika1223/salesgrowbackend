@@ -8,6 +8,7 @@ const Sticker = require("../models/Sticker");
 const LiveSession = require("../models/LiveSession");
 const Investment = require("../models/Investment");
 const { notifyNewChatMessage, previewText } = require("../helper/pushNotify");
+const { blockedShareReason } = require("../helper/messageGuard");
 const path = require("path");
 const fs = require("fs");
 const upload = require("../middleware/upload")
@@ -597,6 +598,12 @@ exports.sendMessage = async (req, res) => {
       return res.status(400).json({ message: "Invalid data" });
     }
 
+    const sendKind = type || (fileUrl ? "file" : "text");
+    if (sendKind !== "sticker" && message) {
+      const blocked = blockedShareReason(message);
+      if (blocked) return res.status(400).json({ message: blocked });
+    }
+
     let liveSession = null;
     if (liveSessionId) {
       if (groupId) {
@@ -954,6 +961,9 @@ exports.editMessage = async (req, res) => {
     if (!messageId || !newMessage) {
       return res.status(400).json({ message: "Invalid request data" });
     }
+
+    const blocked = blockedShareReason(newMessage);
+    if (blocked) return res.status(400).json({ message: blocked });
 
     // Find the message
     const msg = await Message.findById(messageId);

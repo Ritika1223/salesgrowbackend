@@ -315,7 +315,7 @@ exports.getIncomeReport = async (req, res) => {
           ),
           type: 'SELF_INCOME',
           direction: 'credit',
-          description: { $regex: '^1% daily ROI', $options: 'i' }
+          description: { $regex: 'daily ROI', $options: 'i' }
         }
       },
       {
@@ -549,7 +549,7 @@ exports.getWalletTransactions = async (req, res) => {
     } else if (req.query.type === "SELF_INCOME") {
       filter.type = "SELF_INCOME";
       filter.direction = "credit";
-      filter.description = { $regex: "^1% daily ROI", $options: "i" };
+      filter.description = { $regex: "daily ROI", $options: "i" };
     } else if (req.query.type === "DIRECT_INCOME") {
       Object.assign(filter, directIncomeMatch());
     } else if (req.query.type === "LEVEL_INCOME") {
