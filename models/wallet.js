@@ -42,6 +42,7 @@ const walletSchema = new mongoose.Schema({
       'BUY_COIN',
       'TOPUP',
       'REFERRAL_BONUS',
+      'FOLLOW_BONUS',
       'CHAT_SPEND',
       'CHAT_EARN',
       'LIVE_TIP',

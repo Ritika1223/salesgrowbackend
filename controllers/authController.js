@@ -20,6 +20,7 @@ const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || "7d";
 const COINS_PER_RUPEE = 10;
 const REFERRER_REWARD_COINS = 75;
 const SIGNUP_FREE_COINS = 150;
+const FOLLOW_REWARD_COINS = 5;
 
 function randomDigits(len = 6) {
   const numbers = "0123456789";
@@ -812,30 +813,65 @@ exports.toggleFollow =
       const authUserId = req.user?.sub || req.user?.id || req.user?._id;
       const { targetUserId } = req.body;
 
-      if (authUserId === targetUserId) {
+      if (!authUserId || !targetUserId) {
+        return res.status(400).json({ success: false, message: 'targetUserId is required' });
+      }
+      if (String(authUserId) === String(targetUserId)) {
         return res.status(400).json({ success: false, message: 'Cannot follow yourself' });
       }
 
       const authUser = await User.findById(authUserId);
       const targetUser = await User.findById(targetUserId);
 
-      if (!targetUser) {
+      if (!authUser || !targetUser) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
 
-      const alreadyFollowed = targetUser.followers.includes(authUserId);
+      const alreadyFollowed = (targetUser.followers || []).some(
+        (id) => String(id) === String(authUserId)
+      );
 
       if (alreadyFollowed) {
-        // UNFOLLOW: remove authUserId from targetUser's followers AND targetUserId from authUser's following
         await User.findByIdAndUpdate(targetUserId, { $pull: { followers: authUserId } });
         await User.findByIdAndUpdate(authUserId, { $pull: { following: targetUserId } });
-        return res.json({ success: true, message: 'Unfollowed' });
+        return res.json({ success: true, followed: false, message: 'Unfollowed', coinsAwarded: 0 });
       }
-      // FOLLOW: add authUserId to targetUser's followers AND targetUserId to authUser's following
+
       await User.findByIdAndUpdate(targetUserId, { $addToSet: { followers: authUserId } });
       await User.findByIdAndUpdate(authUserId, { $addToSet: { following: targetUserId } });
 
-      return res.json({ success: true, message: 'Followed' });
+      const bonusKey = `follow:${String(authUserId)}:${String(targetUserId)}`;
+      const alreadyPaid = await Wallet.exists({ transactionId: bonusKey });
+      let coinsAwarded = 0;
+      let walletBalance = Number(authUser.walletBalance) || 0;
+
+      if (!alreadyPaid) {
+        const updated = await User.findByIdAndUpdate(
+          authUserId,
+          { $inc: { walletBalance: FOLLOW_REWARD_COINS } },
+          { new: true }
+        );
+        walletBalance = Number(updated?.walletBalance) || walletBalance + FOLLOW_REWARD_COINS;
+        await Wallet.create({
+          userId: authUserId,
+          fromUserId: targetUserId,
+          amount: FOLLOW_REWARD_COINS,
+          credit: FOLLOW_REWARD_COINS,
+          direction: "credit",
+          type: "FOLLOW_BONUS",
+          transactionId: bonusKey,
+          description: "Follow bonus",
+        });
+        coinsAwarded = FOLLOW_REWARD_COINS;
+      }
+
+      return res.json({
+        success: true,
+        followed: true,
+        message: coinsAwarded ? "Followed. 5 coins added." : "Followed",
+        coinsAwarded,
+        walletBalance,
+      });
 
     } catch (err) {
 
