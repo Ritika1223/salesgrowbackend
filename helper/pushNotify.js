@@ -1,6 +1,6 @@
 const webpush = require("web-push");
 const User = require("../models/User");
-const { emitToUser, isUserOnline } = require("../socket");
+const { emitToUser } = require("../socket");
 
 function vapidReady() {
   return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
@@ -71,6 +71,7 @@ async function notifyNewChatMessage({
   preview,
   messageType,
   messageId,
+  url,
 }) {
   const targets = [...new Set((receiverIds || []).map((id) => String(id)).filter(Boolean))];
   const from = String(senderId || "");
@@ -88,16 +89,14 @@ async function notifyNewChatMessage({
     targets.map(async (uid) => {
       if (!uid || uid === from) return;
       emitToUser(uid, "new_message", event);
-      if (!isUserOnline(uid)) {
-        await sendPushToUser(uid, {
-          title: event.senderName,
-          body: event.preview,
-          tag: groupId ? `group-${groupId}` : `chat-${from}`,
-          url: groupId ? "/chat" : `/chat?peer=${from}`,
-          peerId: from,
-          groupId: groupId || null,
-        });
-      }
+      await sendPushToUser(uid, {
+        title: event.senderName,
+        body: event.preview,
+        tag: groupId ? `group-${groupId}` : `chat-${from}`,
+        url: url || (groupId ? "/chat" : `/chat?peer=${from}`),
+        peerId: from,
+        groupId: groupId || null,
+      });
     })
   );
 }

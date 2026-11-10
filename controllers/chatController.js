@@ -17,6 +17,79 @@ const COINS_PER_RUPEE = 10;
 const TEXT_MESSAGE_COST = 2;
 const NEW_DM_START_COST = 10;
 const LIVE_VIEWER_TEXT_COINS = 2;
+const PRIVATE_DM_KEEP = 10;
+
+function privateDmFilter(userA, userB) {
+  return {
+    $or: [
+      { senderId: userA, receiverId: userB },
+      { senderId: userB, receiverId: userA },
+    ],
+    groupId: null,
+    liveSessionId: null,
+  };
+}
+
+/** Keep the newest direct messages between two people and delete the rest. */
+async function trimPrivateThread(userA, userB) {
+  if (!userA || !userB) return 0;
+  const keep = await Message.find(privateDmFilter(userA, userB))
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(PRIVATE_DM_KEEP)
+    .select("_id")
+    .lean();
+  if (keep.length < PRIVATE_DM_KEEP) return 0;
+  const result = await Message.deleteMany({
+    ...privateDmFilter(userA, userB),
+    _id: { $nin: keep.map((row) => row._id) },
+  });
+  return result.deletedCount || 0;
+}
+
+/** One-time cleanup of direct chats that already have more than 10 messages. */
+async function trimAllPrivateThreads() {
+  const rows = await Message.aggregate([
+    {
+      $match: {
+        groupId: null,
+        liveSessionId: null,
+        senderId: { $ne: null },
+        receiverId: { $ne: null },
+      },
+    },
+    {
+      $project: {
+        a: {
+          $cond: [
+            { $lt: [{ $toString: "$senderId" }, { $toString: "$receiverId" }] },
+            "$senderId",
+            "$receiverId",
+          ],
+        },
+        b: {
+          $cond: [
+            { $lt: [{ $toString: "$senderId" }, { $toString: "$receiverId" }] },
+            "$receiverId",
+            "$senderId",
+          ],
+        },
+      },
+    },
+    { $group: { _id: { a: "$a", b: "$b" }, count: { $sum: 1 } } },
+    { $match: { count: { $gt: PRIVATE_DM_KEEP } } },
+  ]);
+
+  let deleted = 0;
+  for (const row of rows) {
+    deleted += await trimPrivateThread(row._id.a, row._id.b);
+  }
+  if (deleted) {
+    console.log(`Removed ${deleted} old direct messages. Each chat keeps ${PRIVATE_DM_KEEP}.`);
+  }
+  return deleted;
+}
+
+exports.trimAllPrivateThreads = trimAllPrivateThreads;
 
 /** Coin ledger used by chat, live, host earnings, and coin purchases. */
 const CHAT_COIN_TYPES = [
@@ -232,21 +305,27 @@ exports.getUsersNotBlockedMe = async (req, res) => {
 
 
 
-// GET PRIVATE MESSAGES
+// GET PRIVATE MESSAGES — newest 10 only. Older ones are deleted.
 exports.getMessages = async (req, res) => {
-  const { user1, user2 } = req.params;
+  try {
+    const { user1, user2 } = req.params;
+    const filter = privateDmFilter(user1, user2);
+    const latest = await Message.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(PRIVATE_DM_KEEP)
+      .lean();
 
-  const messages = await Message.find({
-    $or: [
-      { senderId: user1, receiverId: user2 },
-      { senderId: user2, receiverId: user1 },
-    ],
-    liveSessionId: null,
-  })
-    .sort({ createdAt: 1 })
-    .limit(100);
+    if (latest.length === PRIVATE_DM_KEEP) {
+      trimPrivateThread(user1, user2).catch((err) => {
+        console.warn("DM trim failed:", err.message);
+      });
+    }
 
-  res.json(messages);
+    latest.reverse();
+    return res.json(latest);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
 };
 
 // CREATE GROUP
@@ -859,6 +938,26 @@ exports.sendMessage = async (req, res) => {
           messageType: type || (fileUrl ? "file" : "text"),
           messageId: newMessage._id,
         });
+      } else {
+        if (isLiveHost) {
+          liveSession.hostLastActiveAt = new Date();
+          await liveSession.save();
+        }
+        // Live chat is only for the host. Do not push one message to every user.
+        if (receiverId && String(receiverId) !== String(senderId)) {
+          await notifyNewChatMessage({
+            senderId,
+            senderName: sender.nickname || sender.name || "Someone",
+            receiverIds: [String(receiverId)],
+            preview: previewText({
+              message: message || "",
+              messageType: type || (fileUrl ? "file" : "text"),
+            }),
+            messageType: type || (fileUrl ? "file" : "text"),
+            messageId: newMessage._id,
+            url: `/live/${liveSessionId}`,
+          });
+        }
       }
     } catch (notifyErr) {
       console.warn("Chat notify failed:", notifyErr.message);
@@ -900,6 +999,14 @@ exports.sendMessage = async (req, res) => {
         }
       }
       // You may want to handle "file" tip as well if needed.
+    }
+
+    if (!liveSessionId && !groupId && receiverId) {
+      try {
+        await trimPrivateThread(senderId, receiverId);
+      } catch (trimErr) {
+        console.warn("DM trim failed:", trimErr.message);
+      }
     }
 
     // ✅ RESPONSE

@@ -30,6 +30,12 @@ exports.subscribePush = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // One browser endpoint belongs to the account that just subscribed.
+    await User.updateMany(
+      { _id: { $ne: user._id }, "pushSubscriptions.endpoint": sub.endpoint },
+      { $pull: { pushSubscriptions: { endpoint: sub.endpoint } } }
+    );
+
     const list = Array.isArray(user.pushSubscriptions) ? user.pushSubscriptions : [];
     const next = list.filter((s) => s.endpoint !== sub.endpoint);
     next.push({

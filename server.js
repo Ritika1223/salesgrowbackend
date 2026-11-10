@@ -12,6 +12,8 @@ const packageRoutes = require("./routes/packageRoutes");
 const activityRoutes = require("./routes/activityRoute");
 const adminRoutes = require("./routes/adminRoutes")
 const {startCron} = require("./cron/poolCron");
+const { endIdleHostLives } = require("./controllers/liveController");
+const { trimAllPrivateThreads } = require("./controllers/chatController");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/chat", chatRoutes);
@@ -25,6 +27,16 @@ startCron();
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
+  trimAllPrivateThreads().catch((err) => {
+    console.error("Direct message cleanup failed:", err.message);
+  });
+
+  setInterval(() => {
+    endIdleHostLives().catch((err) => {
+      console.error("Idle live sweep failed:", err.message);
+    });
+  }, 60 * 1000);
+
   const server = http.createServer(app);
   initSocket(server);
   server.listen(PORT, () => {

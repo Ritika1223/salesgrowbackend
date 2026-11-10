@@ -6,6 +6,7 @@ const liveSessionSchema = new mongoose.Schema(
     title: { type: String, default: "" },
     status: { type: String, enum: ["active", "ended"], default: "active" },
     participantIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    hostLastActiveAt: { type: Date, default: Date.now },
     endedAt: { type: Date, default: null },
   },
   { timestamps: true }

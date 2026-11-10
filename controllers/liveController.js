@@ -1,6 +1,7 @@
 const LiveSession = require("../models/LiveSession");
 const Message = require("../models/Message");
 const User = require("../models/User");
+const HOST_LIVE_IDLE_MS = 10 * 60 * 1000;
 
 /** POST body: { userId, title? } */
 exports.startLive = async (req, res) => {
@@ -39,6 +40,7 @@ exports.startLive = async (req, res) => {
       title: String(title || "").trim() || `${host.nickname || host.name || "Host"}'s live`,
       status: "active",
       participantIds: [userId],
+      hostLastActiveAt: new Date(),
     });
 
     const populated = await LiveSession.findById(session._id)
@@ -52,6 +54,52 @@ exports.startLive = async (req, res) => {
     console.error(err);
     return res.status(500).json({ message: err.message || "Server error" });
   }
+};
+
+/** POST body: { userId } — host is still in the live room. */
+exports.hostActivity = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: "userId required" });
+    }
+    const session = await LiveSession.findById(sessionId);
+    if (!session || session.status !== "active") {
+      return res.status(400).json({ message: "Live session is not active" });
+    }
+    if (String(session.hostId) !== String(userId)) {
+      return res.status(403).json({ message: "Only the host can keep this live active" });
+    }
+    session.hostLastActiveAt = new Date();
+    await session.save();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
+/** End lives whose host has not been active. */
+exports.endIdleHostLives = async () => {
+  const cutoff = new Date(Date.now() - HOST_LIVE_IDLE_MS);
+  const stale = await LiveSession.find({
+    status: "active",
+    $or: [
+      { hostLastActiveAt: { $lte: cutoff } },
+      { hostLastActiveAt: null, createdAt: { $lte: cutoff } },
+    ],
+  })
+    .select("_id")
+    .lean();
+  const ids = stale.map((session) => session._id);
+  if (!ids.length) return 0;
+  await Message.deleteMany({ liveSessionId: { $in: ids } });
+  await LiveSession.updateMany(
+    { _id: { $in: ids } },
+    { $set: { status: "ended", endedAt: new Date() } },
+  );
+  return ids.length;
 };
 
 /** POST body: { userId } — end lives this user is hosting and leave lives they joined. */
