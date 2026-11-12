@@ -71,6 +71,7 @@ async function notifyNewChatMessage({
   preview,
   messageType,
   messageId,
+  message,
   url,
 }) {
   const targets = [...new Set((receiverIds || []).map((id) => String(id)).filter(Boolean))];
@@ -80,6 +81,7 @@ async function notifyNewChatMessage({
     senderName: senderName || "Someone",
     groupId: groupId || null,
     preview: preview || "New message",
+    message: message || preview || "New message",
     messageType: messageType || "text",
     messageId: messageId ? String(messageId) : null,
     createdAt: new Date().toISOString(),

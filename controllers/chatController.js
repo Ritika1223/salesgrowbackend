@@ -935,6 +935,7 @@ exports.sendMessage = async (req, res) => {
             message: message || "",
             messageType: type || (fileUrl ? "file" : "text"),
           }),
+          message: message || "",
           messageType: type || (fileUrl ? "file" : "text"),
           messageId: newMessage._id,
         });
@@ -953,6 +954,7 @@ exports.sendMessage = async (req, res) => {
               message: message || "",
               messageType: type || (fileUrl ? "file" : "text"),
             }),
+            message: message || "",
             messageType: type || (fileUrl ? "file" : "text"),
             messageId: newMessage._id,
             url: `/live/${liveSessionId}`,
