@@ -138,6 +138,11 @@ function publicUser(user, totalearn) {
   };
 }
 
+/** Admin opens a member session. Same token shape as a normal login. */
+exports.issueUserLogin = function issueUserLogin(user) {
+  return { token: buildToken(user), user: publicUser(user) };
+};
+
   // Register user
 exports.register = async (req, res) => {
   try {

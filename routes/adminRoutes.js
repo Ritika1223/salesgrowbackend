@@ -24,6 +24,7 @@ router.use(requireAdmin);
 router.get("/income-settings", adminDataController.getIncomeSettings);
 router.put("/income-settings", adminDataController.updateIncomeSettings);
 router.get("/users", adminDataController.listAllUsers);
+router.post("/users/:id/session", adminDataController.loginAsUser);
 router.get("/user-controls", adminDataController.listUserControls);
 router.patch("/users/:id/controls", adminDataController.setUserControl);
 router.get("/income/roi-to-roi", adminDataController.listRoiToRoiIncome);

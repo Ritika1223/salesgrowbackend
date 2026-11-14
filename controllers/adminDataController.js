@@ -12,6 +12,7 @@ const Support = require("../models/Support");
 const Investment = require("../models/Investment");
 const { roiToRoiMatch, crownForInvestment } = require("../helper/rules");
 const { getIncomeSettings, saveIncomeSettings } = require("../helper/incomeSettings");
+const { issueUserLogin } = require("./authController");
 
 exports.listRoiToRoiIncome = async (req, res) => {
   try {
@@ -35,6 +36,32 @@ exports.listAllUsers = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
     return res.json({ users, count: users.length });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.loginAsUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.role === "ADMIN") {
+      return res.status(403).json({ message: "Admin accounts cannot be opened from the user list" });
+    }
+    if (user.isDisabled) {
+      return res.status(403).json({
+        message: "This account is inactive. Activate it before opening the login.",
+      });
+    }
+
+    return res.json(issueUserLogin(user));
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
