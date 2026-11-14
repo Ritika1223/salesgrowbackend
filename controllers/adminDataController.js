@@ -10,6 +10,8 @@ const PaymentHistory = require("../models/PaymentHistory");
 const UserActivity = require("../models/UserActivity");
 const Support = require("../models/Support");
 const Investment = require("../models/Investment");
+const PlanRequest = require("../models/PlanRequest");
+const Withdrawal = require("../models/Withdrawal");
 const { roiToRoiMatch, crownForInvestment } = require("../helper/rules");
 const { getIncomeSettings, saveIncomeSettings } = require("../helper/incomeSettings");
 const { issueUserLogin } = require("./authController");
@@ -24,6 +26,20 @@ exports.listRoiToRoiIncome = async (req, res) => {
 
     const amount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     return res.json({ success: true, data: rows, count: rows.length, amount });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.requestCounts = async (req, res) => {
+  try {
+    const [plan, coins, host, withdrawal] = await Promise.all([
+      PlanRequest.countDocuments({ status: "pending" }),
+      PaymentHistory.countDocuments({ status: "pending" }),
+      HostRequest.countDocuments({ status: "pending" }),
+      Withdrawal.countDocuments({ status: "pending" }),
+    ]);
+    return res.json({ plan, coins, host, withdrawal });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

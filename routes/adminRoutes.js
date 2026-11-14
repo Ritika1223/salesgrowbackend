@@ -23,6 +23,7 @@ router.use(requireAdmin);
 // Admin Data
 router.get("/income-settings", adminDataController.getIncomeSettings);
 router.put("/income-settings", adminDataController.updateIncomeSettings);
+router.get("/request-counts", adminDataController.requestCounts);
 router.get("/users", adminDataController.listAllUsers);
 router.post("/users/:id/session", adminDataController.loginAsUser);
 router.get("/user-controls", adminDataController.listUserControls);

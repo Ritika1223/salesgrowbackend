@@ -107,8 +107,91 @@ exports.getPaymentHistoriesByUserId = async (req, res) => {
   }
 };
 
+async function creditCoinsForPayment(paymentId, adminNote) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const payment = await PaymentHistory.findById(paymentId).session(session);
+    if (!payment) {
+      await session.abortTransaction();
+      return { status: 404, message: "Payment not found" };
+    }
+    if (payment.status === "completed" || Number(payment.coinsAdded) > 0) {
+      await session.abortTransaction();
+      return { status: 400, message: "Coins are already credited for this payment." };
+    }
+    if (!["pending", "approved", "declined"].includes(payment.status)) {
+      await session.abortTransaction();
+      return { status: 400, message: `Cannot credit a ${payment.status} payment.` };
+    }
+
+    const user = await User.findById(payment.userId).session(session);
+    if (!user) {
+      await session.abortTransaction();
+      return { status: 404, message: "User not found" };
+    }
+
+    const rupees = Number(payment.amount);
+    const coins = coinsForUsdt(rupees);
+    if (!coins) {
+      await session.abortTransaction();
+      return { status: 400, message: "This payment has no coins to credit." };
+    }
+
+    const transactionId = `payment-${payment._id}`;
+    const alreadyCredited = await Wallet.findOne({ transactionId }).session(session);
+    if (!alreadyCredited) {
+      user.walletBalance = (Number(user.walletBalance) || 0) + coins;
+      await user.save({ session });
+      await Wallet.create(
+        [
+          {
+            userId: payment.userId,
+            amount: coins,
+            credit: coins,
+            direction: "credit",
+            type: "BUY_COIN",
+            description: `Fund added ₹${rupees} → ${coins} coins (UTR: ${payment.transactionNo})`,
+            transactionId,
+          },
+        ],
+        { session }
+      );
+    }
+
+    payment.status = "completed";
+    payment.coins = coins;
+    payment.coinsAdded = coins;
+    if (adminNote !== undefined) payment.adminNote = adminNote;
+    await payment.save({ session });
+    await session.commitTransaction();
+
+    return {
+      status: 200,
+      message: `Payment approved. ${coins} coins credited.`,
+      data: {
+        payment,
+        coinsAdded: coins,
+        walletBalance: user.walletBalance,
+        coinsPerRupee: COINS_PER_RUPEE,
+      },
+    };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    try {
+      await session.endSession();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /**
- * Approve or decline a payment (admin)
+ * Approve or decline a payment (admin).
+ * Approving credits the coins immediately.
  */
 exports.updatePaymentStatus = async (req, res) => {
   try {
@@ -119,24 +202,26 @@ exports.updatePaymentStatus = async (req, res) => {
       return res.status(400).json({ message: "Status must be approved or declined." });
     }
 
+    if (status === "approved") {
+      const result = await creditCoinsForPayment(id, adminNote);
+      return res.status(result.status).json({
+        message: result.message,
+        data: result.data,
+      });
+    }
+
     const payment = await PaymentHistory.findById(id);
     if (!payment) {
       return res.status(404).json({ message: "Payment not found" });
     }
-
-    if (payment.status === "completed") {
-      return res.status(400).json({ message: "Payment already completed." });
+    if (payment.status === "completed" || Number(payment.coinsAdded) > 0) {
+      return res.status(400).json({ message: "Coins are already credited for this payment." });
+    }
+    if (payment.status === "declined") {
+      return res.status(400).json({ message: "Payment is already declined." });
     }
 
-    if (payment.status === "declined" && status === "approved") {
-      // allow re-approval after decline
-    } else if (payment.status !== "pending" && status !== payment.status) {
-      return res.status(400).json({
-        message: `Cannot change status from ${payment.status} to ${status}.`,
-      });
-    }
-
-    payment.status = status;
+    payment.status = "declined";
     if (adminNote !== undefined) payment.adminNote = adminNote;
     await payment.save();
 
@@ -145,89 +230,27 @@ exports.updatePaymentStatus = async (req, res) => {
       "name email phone"
     );
 
-    res.status(200).json({
-      message: `Payment ${status}`,
+    return res.status(200).json({
+      message: "Payment declined",
       data: populated,
     });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
 /**
- * Add fund (coins) to user based on an approved payment (admin)
+ * Credit coins for a payment that was approved before automatic credit.
  */
-
 exports.addFundFromPayment = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const { id } = req.params;
-    const payment = await PaymentHistory.findById(id).session(session);
-
-    if (!payment) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "Payment not found" });
-    }
-
-    if (payment.status !== "approved") {
-      await session.abortTransaction();
-      return res.status(400).json({
-        message: "Only approved payments can be credited.",
-      });
-    }
-
-    const user = await User.findById(payment.userId).session(session);
-    if (!user) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const rupees = Number(payment.amount);
-    const coins = coinsForUsdt(rupees);
-
-    user.walletBalance = (Number(user.walletBalance) || 0) + coins;
-    await user.save({ session });
-
-    await Wallet.create(
-      [
-        {
-          userId: payment.userId,
-          amount: coins,
-          direction: "credit",
-          type: "BUY_COIN",
-          description: `Fund added ₹${rupees} → ${coins} coins (UTR: ${payment.transactionNo})`,
-          transactionId: `payment-${payment._id}`,
-        },
-      ],
-      { session }
-    );
-
-    payment.status = "completed";
-    payment.coinsAdded = coins;
-    await payment.save({ session });
-
-    await session.commitTransaction();
-
-    res.status(200).json({
-      message: "Fund added successfully",
-      data: {
-        payment,
-        coinsAdded: coins,
-        walletBalance: user.walletBalance,
-        coinsPerRupee: COINS_PER_RUPEE,
-      },
+    const result = await creditCoinsForPayment(req.params.id);
+    return res.status(result.status).json({
+      message: result.status === 200 ? "Fund added successfully" : result.message,
+      data: result.data,
     });
   } catch (err) {
-    await session.abortTransaction();
-    res.status(500).json({ message: "Server error", error: err.message });
-  } finally {
-    try {
-      await session.endSession();
-    } catch {
-      /* ignore */
-    }
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
