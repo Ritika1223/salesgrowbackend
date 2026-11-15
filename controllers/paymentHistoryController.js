@@ -67,7 +67,7 @@ exports.createPaymentHistory = async (req, res) => {
 exports.getAllPaymentHistories = async (req, res) => {
   try {
     const payments = await PaymentHistory.find()
-      .populate("userId", "name email phone")
+      .populate("userId", "name email phone referralCode")
       .sort({ createdAt: -1 });
     res.status(200).json({ data: payments });
   } catch (err) {
@@ -83,7 +83,7 @@ exports.getPaymentHistoryById = async (req, res) => {
     const { id } = req.params;
     const payment = await PaymentHistory.findById(id).populate(
       "userId",
-      "name email phone walletBalance"
+      "name email phone walletBalance referralCode"
     );
     if (!payment) {
       return res.status(404).json({ message: "Payment history not found" });
@@ -227,7 +227,7 @@ exports.updatePaymentStatus = async (req, res) => {
 
     const populated = await PaymentHistory.findById(id).populate(
       "userId",
-      "name email phone"
+      "name email phone referralCode"
     );
 
     return res.status(200).json({
@@ -261,7 +261,7 @@ exports.addFundFromPayment = async (req, res) => {
 exports.getApprovedPayments = async (req, res) => {
   try {
     const payments = await PaymentHistory.find({ status: "approved" })
-      .populate("userId", "name email phone walletBalance")
+      .populate("userId", "name email phone walletBalance referralCode")
       .sort({ createdAt: -1 });
     res.status(200).json({ data: payments, coinsPerRupee: COINS_PER_RUPEE });
   } catch (err) {

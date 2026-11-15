@@ -47,10 +47,33 @@ exports.requestCounts = async (req, res) => {
 
 exports.listAllUsers = async (req, res) => {
   try {
-    const users = await User.find()
-      .select("+password")
-      .sort({ createdAt: -1 })
-      .lean();
+    const [users, investments] = await Promise.all([
+      User.find().select("+password").sort({ createdAt: -1 }).lean(),
+      Investment.find().select("userId amount status endsAt createdAt").lean(),
+    ]);
+
+    const activeTotals = new Map();
+    const latestAmount = new Map();
+    const now = Date.now();
+    for (const row of investments) {
+      const key = String(row.userId);
+      const amount = Number(row.amount || 0);
+      const active = row.status === "active" && new Date(row.endsAt).getTime() > now;
+      if (active) {
+        activeTotals.set(key, (activeTotals.get(key) || 0) + amount);
+      }
+      const previous = latestAmount.get(key);
+      if (!previous || new Date(row.createdAt).getTime() > previous.at) {
+        latestAmount.set(key, { amount, at: new Date(row.createdAt).getTime() });
+      }
+    }
+
+    for (const user of users) {
+      const key = String(user._id);
+      user.investmentAmount =
+        activeTotals.get(key) || latestAmount.get(key)?.amount || 0;
+    }
+
     return res.json({ users, count: users.length });
   } catch (error) {
     return res.status(500).json({ message: error.message });

@@ -144,7 +144,7 @@ exports.getMyPlanRequest = async (req, res) => {
 exports.listPlanRequests = async (req, res) => {
   try {
     const requests = await PlanRequest.find()
-      .populate("userId", "name email phone plan isActive hostApproved")
+      .populate("userId", "name email phone plan isActive hostApproved referralCode")
       .sort({ createdAt: -1 });
     return res.json({ data: requests });
   } catch (err) {
@@ -211,7 +211,7 @@ exports.updatePlanRequestStatus = async (req, res) => {
 
     const populated = await PlanRequest.findById(id).populate(
       "userId",
-      "name email phone plan isActive hostApproved"
+      "name email phone plan isActive hostApproved referralCode"
     );
 
     return res.json({

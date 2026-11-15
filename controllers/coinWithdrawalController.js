@@ -92,7 +92,7 @@ exports.createCoinWithdrawal = async (req, res) => {
 exports.listCoinWithdrawals = async (req, res) => {
   try {
     const list = await CoinWithdrawal.find()
-      .populate("userId", "name nickname phone email walletBalance")
+      .populate("userId", "name nickname phone email walletBalance referralCode")
       .sort({ createdAt: -1 });
     return res.json({ data: list });
   } catch (err) {

@@ -106,7 +106,7 @@ exports.getMyHostRequest = async (req, res) => {
 exports.listHostRequests = async (req, res) => {
   try {
     const requests = await HostRequest.find()
-      .populate("userId", "name email phone profileMode hostApproved")
+      .populate("userId", "name email phone profileMode hostApproved referralCode")
       .sort({ createdAt: -1 });
     return res.json({ data: requests });
   } catch (err) {
@@ -156,7 +156,7 @@ exports.updateHostRequestStatus = async (req, res) => {
 
     const populated = await HostRequest.findById(id).populate(
       "userId",
-      "name email phone profileMode hostApproved"
+      "name email phone profileMode hostApproved referralCode"
     );
 
     return res.json({
