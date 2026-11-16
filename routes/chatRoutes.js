@@ -10,6 +10,7 @@ const coinWithdrawalController = require("../controllers/coinWithdrawalControlle
 
 
 router.get("/users", chatController.getUsers);
+router.get("/presence", chatController.getPresence);
 router.get("/users-not-blocked-me", Token.Validate, chatController.getUsersNotBlockedMe);
 router.post("/add-group-members", chatController.addGroupMembers);
 router.get("/potential-members", chatController.getUsersNotInGroupAndNotBlockedMe);

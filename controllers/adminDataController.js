@@ -80,6 +80,104 @@ exports.listAllUsers = async (req, res) => {
   }
 };
 
+const TEAM_SELECT = "name nickname phone referralCode isActive plan createdAt referredBy isDisabled";
+
+function teamMember(user, extra = {}) {
+  return {
+    _id: user._id,
+    name: user.name || "",
+    nickname: user.nickname || "",
+    phone: user.phone || "",
+    referralCode: user.referralCode || "",
+    isActive: Boolean(user.isActive),
+    isDisabled: Boolean(user.isDisabled),
+    plan: user.plan || "",
+    createdAt: user.createdAt || null,
+    ...extra,
+  };
+}
+
+async function findTeamUser(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  if (mongoose.Types.ObjectId.isValid(text)) {
+    const byId = await User.findById(text).select(TEAM_SELECT).lean();
+    if (byId) return byId;
+  }
+  return User.findOne({ referralCode: text.toUpperCase() }).select(TEAM_SELECT).lean();
+}
+
+exports.getUpline = async (req, res) => {
+  try {
+    const user = await findTeamUser(req.query.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const members = [];
+    const seen = new Set([String(user._id)]);
+    let sponsorId = user.referredBy;
+    let level = 1;
+
+    while (sponsorId && level <= 50) {
+      const key = String(sponsorId);
+      if (seen.has(key)) break;
+      seen.add(key);
+      const sponsor = await User.findById(sponsorId).select(TEAM_SELECT).lean();
+      if (!sponsor) break;
+      members.push(teamMember(sponsor, { level }));
+      sponsorId = sponsor.referredBy;
+      level += 1;
+    }
+
+    return res.json({ user: teamMember(user), members });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getDownline = async (req, res) => {
+  try {
+    const user = await findTeamUser(req.query.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const sponsorById = new Map([[String(user._id), user]]);
+    const levels = [];
+    const seen = new Set([String(user._id)]);
+    let parentIds = [user._id];
+
+    for (let level = 1; level <= 21 && parentIds.length; level += 1) {
+      const rows = await User.find({ referredBy: { $in: parentIds } })
+        .select(TEAM_SELECT)
+        .sort({ createdAt: 1 })
+        .lean();
+      const fresh = rows.filter((row) => !seen.has(String(row._id)));
+      fresh.forEach((row) => {
+        seen.add(String(row._id));
+        sponsorById.set(String(row._id), row);
+      });
+      levels.push({
+        level,
+        members: fresh.map((row) => {
+          const sponsor = sponsorById.get(String(row.referredBy));
+          return teamMember(row, {
+            level,
+            referredBy: sponsor ? teamMember(sponsor) : null,
+          });
+        }),
+      });
+      parentIds = fresh.map((row) => row._id);
+    }
+
+    const total = levels.reduce((sum, row) => sum + row.members.length, 0);
+    return res.json({ user: teamMember(user), levels, total });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 exports.loginAsUser = async (req, res) => {
   try {
     const { id } = req.params;

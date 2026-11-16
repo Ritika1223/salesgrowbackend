@@ -5,6 +5,38 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-JWT_SECRET";
 
 let io = null;
 const userSockets = new Map();
+const lastActiveAt = new Map();
+const ONLINE_IDLE_MS = 4 * 60 * 1000;
+
+function touchPresence(userId) {
+  if (!userId) return;
+  lastActiveAt.set(String(userId), Date.now());
+}
+
+function lastActiveIso(userId) {
+  if (!userId) return null;
+  const key = String(userId);
+  const at = lastActiveAt.get(key);
+  if (!at) return null;
+  if (Date.now() - at >= ONLINE_IDLE_MS) {
+    lastActiveAt.delete(key);
+    return null;
+  }
+  return new Date(at).toISOString();
+}
+
+function listRecentPresence() {
+  const now = Date.now();
+  const rows = [];
+  for (const [userId, at] of lastActiveAt) {
+    if (now - at >= ONLINE_IDLE_MS) {
+      lastActiveAt.delete(userId);
+      continue;
+    }
+    rows.push({ userId, lastActiveAt: new Date(at).toISOString() });
+  }
+  return rows;
+}
 
 function addSocket(userId, socketId) {
   const key = String(userId);
@@ -62,6 +94,11 @@ function initSocket(httpServer) {
     const userId = socket.userId;
     socket.join(`user:${userId}`);
     addSocket(userId, socket.id);
+    touchPresence(userId);
+
+    socket.on("presence", () => {
+      touchPresence(userId);
+    });
 
     socket.on("disconnect", () => {
       removeSocket(userId, socket.id);
@@ -85,4 +122,8 @@ module.exports = {
   getIO,
   emitToUser,
   isUserOnline,
+  touchPresence,
+  lastActiveIso,
+  listRecentPresence,
+  ONLINE_IDLE_MS,
 };

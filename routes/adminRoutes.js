@@ -25,6 +25,8 @@ router.get("/income-settings", adminDataController.getIncomeSettings);
 router.put("/income-settings", adminDataController.updateIncomeSettings);
 router.get("/request-counts", adminDataController.requestCounts);
 router.get("/users", adminDataController.listAllUsers);
+router.get("/team/upline", adminDataController.getUpline);
+router.get("/team/downline", adminDataController.getDownline);
 router.post("/users/:id/session", adminDataController.loginAsUser);
 router.get("/user-controls", adminDataController.listUserControls);
 router.patch("/users/:id/controls", adminDataController.setUserControl);

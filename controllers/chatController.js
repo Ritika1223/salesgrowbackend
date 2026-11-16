@@ -12,6 +12,7 @@ const { blockedShareReason } = require("../helper/messageGuard");
 const path = require("path");
 const fs = require("fs");
 const upload = require("../middleware/upload")
+const { lastActiveIso, listRecentPresence } = require("../socket");
 
 const COINS_PER_RUPEE = 10;
 const TEXT_MESSAGE_COST = 2;
@@ -125,11 +126,20 @@ async function withInvestmentAmounts(users) {
     return {
       ...plain,
       planAmount: totals.get(String(plain._id)) || 0,
+      lastActiveAt: lastActiveIso(plain._id),
     };
   });
 }
 
 // GET USERS
+
+exports.getPresence = (req, res) => {
+  return res.status(200).json({
+    success: true,
+    idleMinutes: 4,
+    data: listRecentPresence(),
+  });
+};
 
 exports.getUsers = async (req, res) => {
   try {
