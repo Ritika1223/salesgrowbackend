@@ -11,8 +11,10 @@ const planRequestController = require("../controllers/planRequestController");
 const withdrawalController = require("../controllers/withdrawalController");
 const coinWithdrawalController = require("../controllers/coinWithdrawalController");
 
+const projectPdfController = require("../controllers/projectPdfController");
 const { requireAdmin } = require("../middleware/adminAuth");
 const upload = require("../middleware/upload");
+const { uploadProjectPdf } = require("../middleware/uploadPdf");
 
 // 🔓 Public
 router.post("/auth/login", adminAuthController.login);
@@ -21,10 +23,12 @@ router.post("/auth/login", adminAuthController.login);
 router.use(requireAdmin);
 
 // Admin Data
+router.get("/dashboard-summary", adminDataController.dashboardSummary);
 router.get("/income-settings", adminDataController.getIncomeSettings);
 router.put("/income-settings", adminDataController.updateIncomeSettings);
 router.get("/request-counts", adminDataController.requestCounts);
 router.get("/users", adminDataController.listAllUsers);
+router.post("/income-adjust", adminDataController.adjustUserIncome);
 router.get("/team/upline", adminDataController.getUpline);
 router.get("/team/downline", adminDataController.getDownline);
 router.post("/users/:id/session", adminDataController.loginAsUser);
@@ -73,6 +77,10 @@ router.get("/withdrawals", withdrawalController.listWithdrawals);
 router.patch("/withdrawals/:id/status", withdrawalController.updateWithdrawalStatus);
 router.get("/coin-withdrawals", coinWithdrawalController.listCoinWithdrawals);
 router.patch("/coin-withdrawals/:id/status", coinWithdrawalController.updateCoinWithdrawalStatus);
+
+router.get("/project-pdfs", projectPdfController.listProjectPdfs);
+router.post("/project-pdfs", uploadProjectPdf, projectPdfController.createProjectPdf);
+router.delete("/project-pdfs/:id", projectPdfController.deleteProjectPdf);
 
 router.get("/plan-requests", planRequestController.listPlanRequests);
 router.patch(

@@ -20,6 +20,16 @@ function indiaHour(date = new Date()) {
   return n === 24 ? 0 : n;
 }
 
+function toCents(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round(amount * 100);
+}
+
+function fromCents(cents) {
+  return Math.max(0, cents) / 100;
+}
+
 exports.createWithdrawal = async (req, res) => {
   try {
     const userId = tokenUserId(req);
@@ -52,13 +62,15 @@ exports.createWithdrawal = async (req, res) => {
     if (!ok) return res.status(400).json({ message: "Wrong transaction password" });
 
     const pending = await Withdrawal.find({ userId, status: "pending" });
-    const reserved = pending.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    const mlmAvailable = Math.max(
+    const reservedCents = pending.reduce((sum, row) => sum + toCents(row.amount), 0);
+    const availableCents = Math.max(
       0,
-      Number(user.totalEarning || 0) - Number(user.totalWithdraw || 0)
+      toCents(user.totalEarning) - toCents(user.totalWithdraw) - reservedCents
     );
-    if (mlmAvailable - reserved < amount) {
-      return res.status(400).json({ message: "Not enough income balance" });
+    if (toCents(amount) > availableCents) {
+      return res.status(400).json({
+        message: `Not enough income balance. Available is $${fromCents(availableCents).toFixed(2)}.`,
+      });
     }
 
     const deduction = Math.round(amount * INVESTMENT.withdrawDeductionPercent) / 100;
@@ -117,11 +129,11 @@ exports.updateWithdrawalStatus = async (req, res) => {
 
     if (status === "approved") {
       const user = await User.findById(request.userId).select("totalEarning totalWithdraw");
-      const mlmAvailable = Math.max(
+      const availableCents = Math.max(
         0,
-        Number(user?.totalEarning || 0) - Number(user?.totalWithdraw || 0)
+        toCents(user?.totalEarning) - toCents(user?.totalWithdraw)
       );
-      if (!user || mlmAvailable < request.amount) {
+      if (!user || availableCents < toCents(request.amount)) {
         return res.status(400).json({ message: "User does not have enough income balance" });
       }
       user.totalWithdraw = Number(user.totalWithdraw || 0) + request.amount;

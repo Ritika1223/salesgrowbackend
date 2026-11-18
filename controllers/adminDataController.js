@@ -16,6 +16,47 @@ const { roiToRoiMatch, crownForInvestment } = require("../helper/rules");
 const { getIncomeSettings, saveIncomeSettings } = require("../helper/incomeSettings");
 const { issueUserLogin } = require("./authController");
 
+exports.dashboardSummary = async (req, res) => {
+  try {
+    const [investRows, roiRows, approvedRows, pendingRows] = await Promise.all([
+      Investment.aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Wallet.aggregate([
+        {
+          $match: {
+            direction: "credit",
+            type: "SELF_INCOME",
+            description: { $regex: "daily ROI", $options: "i" },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Withdrawal.aggregate([
+        { $match: { status: "approved" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Withdrawal.aggregate([
+        { $match: { status: "pending" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const totalInvest = Number(investRows[0]?.total || 0);
+    const totalRoi = Number(roiRows[0]?.total || 0);
+    const totalWithdraw = Number(approvedRows[0]?.total || 0);
+    const pendingWithdraw = Number(pendingRows[0]?.total || 0);
+
+    return res.json({
+      totalInvest,
+      totalRoi,
+      totalWithdraw,
+      pendingWithdraw,
+      balance: totalInvest - totalWithdraw,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 exports.listRoiToRoiIncome = async (req, res) => {
   try {
     const rows = await Wallet.find(roiToRoiMatch())
@@ -173,6 +214,69 @@ exports.getDownline = async (req, res) => {
 
     const total = levels.reduce((sum, row) => sum + row.members.length, 0);
     return res.json({ user: teamMember(user), levels, total });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.adjustUserIncome = async (req, res) => {
+  try {
+    const direction = String(req.body.direction || "").toLowerCase();
+    if (!["credit", "debit"].includes(direction)) {
+      return res.status(400).json({ message: "Direction must be credit or debit" });
+    }
+
+    const amount = Math.round(Number(req.body.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Enter an amount greater than 0" });
+    }
+
+    const found = await findTeamUser(req.body.userId || req.body.id);
+    if (!found) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = await User.findById(found._id).select("name referralCode totalEarning totalWithdraw");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const earning = Number(user.totalEarning || 0);
+    const withdrawn = Number(user.totalWithdraw || 0);
+    if (direction === "debit" && earning - amount + 0.0001 < withdrawn) {
+      const available = Math.max(0, Math.round((earning - withdrawn) * 100) / 100);
+      return res.status(400).json({
+        message: `Not enough income. Available to debit is $${available}.`,
+      });
+    }
+
+    user.totalEarning = Math.round((earning + (direction === "credit" ? amount : -amount)) * 100) / 100;
+    await user.save();
+
+    await Wallet.create({
+      userId: user._id,
+      amount,
+      direction,
+      type: "ADMIN_ADJUST",
+      description: direction === "credit"
+        ? `Admin credited $${amount} to income`
+        : `Admin debited $${amount} from income`,
+      transactionId: `ADM-${direction}-${user._id}-${Date.now()}`,
+    });
+
+    return res.json({
+      message: direction === "credit"
+        ? `$${amount} added to income`
+        : `$${amount} deducted from income`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        referralCode: user.referralCode,
+        totalEarning: user.totalEarning,
+        totalWithdraw: withdrawn,
+        remaining: Math.round((user.totalEarning - withdrawn) * 100) / 100,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

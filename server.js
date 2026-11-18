@@ -11,6 +11,7 @@ const stickerRoutes = require("./routes/stickerRoutes");
 const packageRoutes = require("./routes/packageRoutes");
 const activityRoutes = require("./routes/activityRoute");
 const adminRoutes = require("./routes/adminRoutes")
+const projectPdfRoutes = require("./routes/projectPdfRoutes");
 const {startCron} = require("./cron/poolCron");
 const { endIdleHostLives } = require("./controllers/liveController");
 const { trimAllPrivateThreads } = require("./controllers/chatController");
@@ -20,6 +21,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/api", stickerRoutes);
 app.use("/api/plans", packageRoutes);
 app.use("/api/", activityRoutes);
+app.use("/api/project-pdfs", projectPdfRoutes);
 app.use("/api/admin", adminRoutes);
 
 startCron();
